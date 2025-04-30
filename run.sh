@@ -1,32 +1,26 @@
 #!/bin/bash
 
-# Build and run the Redis clone
-# Usage: ./run.sh [server]
+# Stop and remove any existing container
+if docker ps -a | grep -q redis-clone; then
+  echo "Stopping and removing existing container..."
+  docker stop redis-clone
+  docker rm redis-clone
+fi
 
-# Ensure script exits on any error
-set -e
+# Build the Docker image
+echo "Building Docker image..."
+docker build -t redis-clone .
 
-# Variables
-GO_CMD=go
-BUILD_CMD="$GO_CMD build -o redis-clone"
-RUN_CMD="./redis-clone"
+# Run the Redis clone container
+echo "Starting Redis clone container..."
+docker run -d \
+  --name redis-clone \
+  -p 6379:6379 \
+  -p 8080:8080 \
+  -v redis-data:/data \
+  redis-clone
 
-# Ensure proper error messages
-function error_exit {
-    echo "Error: $1" >&2
-    exit 1
-}
-
-# Build the application
-echo "Building Redis clone..."
-$BUILD_CMD || error_exit "Failed to build"
-echo "Build successful!"
-
-# Run the application
-if [ "$1" == "server" ]; then
-    echo "Starting Redis clone server..."
-    $RUN_CMD server
-else
-    echo "Starting Redis clone..."
-    $RUN_CMD
-fi 
+echo "Container started! Connect using:"
+echo "  redis-cli -p 6379"
+echo ""
+echo "HTTP API available at http://localhost:8080" 

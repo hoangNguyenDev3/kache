@@ -96,7 +96,3 @@ The Redis clone is composed of several components:
 - HTTP server - RESTful API
 - Store - In-memory data store with support for different data types
 - Persistence - RDB and AOF persistence mechanisms
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details. 
