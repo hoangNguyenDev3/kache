@@ -250,7 +250,7 @@ func NewReader(conn net.Conn) *Reader {
 	}
 }
 
-// ReadCommand reads a RESP command
+// ReadCommand reads a command from the reader
 func (r *Reader) ReadCommand() ([]string, error) {
 	value, err := Parse(r.reader)
 	if err != nil {
@@ -263,7 +263,7 @@ func (r *Reader) ReadCommand() ([]string, error) {
 
 	result := make([]string, len(value.Array))
 	for i, v := range value.Array {
-		if v.Type != BulkString {
+		if v.Type != BulkString && v.Type != SimpleString {
 			return nil, fmt.Errorf("expected bulk string, got %c", v.Type)
 		}
 		result[i] = v.Str
@@ -274,18 +274,9 @@ func (r *Reader) ReadCommand() ([]string, error) {
 
 // FormatCommand formats a command as a RESP array
 func FormatCommand(cmd []string) []byte {
-	var buf bytes.Buffer
-	buf.WriteByte(Array)
-	buf.WriteString(strconv.Itoa(len(cmd)))
-	buf.Write(CRLF)
-
-	for _, arg := range cmd {
-		buf.WriteByte(BulkString)
-		buf.WriteString(strconv.Itoa(len(arg)))
-		buf.Write(CRLF)
-		buf.WriteString(arg)
-		buf.Write(CRLF)
+	array := make([]Value, len(cmd))
+	for i, s := range cmd {
+		array[i] = NewBulkString(s)
 	}
-
-	return buf.Bytes()
+	return NewArray(array).Marshal()
 }
