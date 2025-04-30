@@ -248,19 +248,12 @@ func (s *Store) GC() int {
 	now := time.Now()
 	removed := 0
 
-	for k, entry := range s.data {
+	for key, entry := range s.data {
 		if entry.ExpiresAt != nil && now.After(*entry.ExpiresAt) {
-			delete(s.data, k)
+			delete(s.data, key)
 			removed++
 		}
 	}
 
 	return removed
-}
-
-// Size returns the number of keys in the store
-func (s *Store) Size() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.data)
 }
