@@ -15,7 +15,7 @@ RUN go mod download
 COPY . .
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o redis-clone
+RUN CGO_ENABLED=0 GOOS=linux go build -o kache
 
 # Final stage
 FROM alpine:latest
@@ -23,7 +23,7 @@ FROM alpine:latest
 WORKDIR /app
 
 # Copy the binary from builder
-COPY --from=builder /app/redis-clone .
+COPY --from=builder /app/kache .
 
 # Create data directory for persistence
 RUN mkdir -p /data
@@ -32,9 +32,9 @@ RUN mkdir -p /data
 EXPOSE 6379 8080
 
 # Set environment variables
-ENV REDIS_CLONE_RESP_PORT=6379 \
-    REDIS_CLONE_HTTP_PORT=8080 \
-    REDIS_CLONE_RDB_PATH="/data/dump.rdb"
+ENV KACHE_RESP_PORT=6379 \
+    KACHE_HTTP_PORT=8080 \
+    KACHE_RDB_PATH="/data/dump.rdb"
 
 # Run the server
-CMD ["./redis-clone", "server"] 
+CMD ["./kache", "server"] 

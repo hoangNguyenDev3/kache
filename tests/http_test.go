@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hoangNguyenDev3/redis-clone/server"
-	"github.com/hoangNguyenDev3/redis-clone/store"
+	"github.com/hoangNguyenDev3/kache/server"
+	"github.com/hoangNguyenDev3/kache/store"
 	"github.com/stretchr/testify/assert"
 )
 

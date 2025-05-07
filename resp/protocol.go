@@ -18,6 +18,11 @@ const (
 	Array        = '*'
 )
 
+const (
+	MaxArrayLength      = 1048576           // 1M elements max per array
+	MaxBulkStringLength = 512 * 1024 * 1024 // 512MB max per bulk string
+)
+
 var (
 	ErrInvalidSyntax = errors.New("invalid RESP syntax")
 	CRLF             = []byte{'\r', '\n'}
@@ -164,6 +169,9 @@ func parseBulkString(r *bufio.Reader) (Value, error) {
 	if length < 0 {
 		return Value{}, fmt.Errorf("invalid bulk string length: %d", length)
 	}
+	if length > MaxBulkStringLength {
+		return Value{}, fmt.Errorf("bulk string length %d exceeds maximum allowed %d", length, MaxBulkStringLength)
+	}
 
 	// Read the string data
 	data := make([]byte, length)
@@ -199,6 +207,9 @@ func parseArray(r *bufio.Reader) (Value, error) {
 	if length < 0 {
 		return Value{}, fmt.Errorf("invalid array length: %d", length)
 	}
+	if length > MaxArrayLength {
+		return Value{}, fmt.Errorf("array length %d exceeds maximum allowed %d", length, MaxArrayLength)
+	}
 
 	array := make([]Value, length)
 	for i := 0; i < length; i++ {
@@ -226,15 +237,15 @@ func readLine(r *bufio.Reader) ([]byte, error) {
 	return line[:len(line)-2], nil
 }
 
-// Write writes a RESP value to the connection
-func Write(conn net.Conn, value *Value) error {
-	_, err := conn.Write(value.Marshal())
+// Write writes a RESP value to the writer
+func Write(w io.Writer, value *Value) error {
+	_, err := w.Write(value.Marshal())
 	return err
 }
 
-// WriteError writes a RESP error to the connection
-func WriteError(conn net.Conn, message string) error {
-	_, err := conn.Write(NewError(fmt.Errorf(message)).Marshal())
+// WriteError writes a RESP error to the writer
+func WriteError(w io.Writer, message string) error {
+	_, err := w.Write(NewError(fmt.Errorf(message)).Marshal())
 	return err
 }
 

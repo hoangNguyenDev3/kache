@@ -1,24 +1,24 @@
 #!/bin/bash
 
 # Stop and remove any existing container
-if docker ps -a | grep -q redis-clone; then
+if docker ps -a | grep -q kache; then
   echo "Stopping and removing existing container..."
-  docker stop redis-clone
-  docker rm redis-clone
+  docker stop kache
+  docker rm kache
 fi
 
 # Build the Docker image
 echo "Building Docker image..."
-docker build -t redis-clone .
+docker build -t kache .
 
-# Run the Redis clone container
-echo "Starting Redis clone container..."
+# Run the Kache container
+echo "Starting Kache container..."
 docker run -d \
-  --name redis-clone \
+  --name kache \
   -p 6379:6379 \
   -p 8080:8080 \
-  -v redis-data:/data \
-  redis-clone
+  -v kache-data:/data \
+  kache
 
 echo "Container started! Connect using:"
 echo "  redis-cli -p 6379"

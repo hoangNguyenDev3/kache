@@ -4,12 +4,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hoangNguyenDev3/redis-clone/store"
+	"github.com/hoangNguyenDev3/kache/store"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestStore_Set(t *testing.T) {
-	s := store.New(nil)
+	s := store.New(&store.StoreConfig{GCInterval: -1})
 
 	// Test simple set
 	err := s.Set("key1", "value1", nil)
@@ -121,7 +121,7 @@ func TestStore_WrongType(t *testing.T) {
 }
 
 func TestStore_GC(t *testing.T) {
-	s := store.New(nil)
+	s := store.New(&store.StoreConfig{GCInterval: -1})
 
 	// Set some keys with expiration
 	expiration := time.Now().Add(100 * time.Millisecond)

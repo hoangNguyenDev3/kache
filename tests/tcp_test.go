@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hoangNguyenDev3/redis-clone/resp"
-	"github.com/hoangNguyenDev3/redis-clone/server"
-	"github.com/hoangNguyenDev3/redis-clone/store"
+	"github.com/hoangNguyenDev3/kache/pubsub"
+	"github.com/hoangNguyenDev3/kache/resp"
+	"github.com/hoangNguyenDev3/kache/server"
+	"github.com/hoangNguyenDev3/kache/store"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -17,7 +18,8 @@ func setupTCPServer(t *testing.T) (*server.TCPServer, string) {
 	tcpConfig := &server.Config{
 		ClientTimeout: 30 * time.Second,
 	}
-	tcpServer := server.NewTCPServer(s, tcpConfig)
+	ps := pubsub.New()
+	tcpServer := server.NewTCPServer(s, tcpConfig, ps)
 
 	// Start server on random port
 	listener, err := net.Listen("tcp", ":0")

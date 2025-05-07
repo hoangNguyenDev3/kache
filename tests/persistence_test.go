@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hoangNguyenDev3/redis-clone/server"
-	"github.com/hoangNguyenDev3/redis-clone/store"
+	"github.com/hoangNguyenDev3/kache/pubsub"
+	"github.com/hoangNguyenDev3/kache/server"
+	"github.com/hoangNguyenDev3/kache/store"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -29,7 +30,8 @@ func TestRDBPersistence(t *testing.T) {
 	tcpConfig := &server.Config{
 		ClientTimeout: 30 * time.Second,
 	}
-	tcpServer := server.NewTCPServer(s, tcpConfig)
+	ps := pubsub.New()
+	tcpServer := server.NewTCPServer(s, tcpConfig, ps)
 
 	// Start server on random port
 	listener, err := net.Listen("tcp", ":0")
@@ -65,7 +67,8 @@ func TestRDBPersistence(t *testing.T) {
 	err = s2.LoadRDB(rdbPath)
 	assert.NoError(t, err)
 
-	tcpServer2 := server.NewTCPServer(s2, tcpConfig)
+	ps2 := pubsub.New()
+	tcpServer2 := server.NewTCPServer(s2, tcpConfig, ps2)
 
 	// Start new server on random port
 	listener2, err := net.Listen("tcp", ":0")

@@ -7,7 +7,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/hoangNguyenDev3/redis-clone/resp"
+	"github.com/hoangNguyenDev3/kache/resp"
 	"github.com/stretchr/testify/assert"
 )
 

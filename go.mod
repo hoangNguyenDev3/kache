@@ -1,4 +1,4 @@
-module github.com/hoangNguyenDev3/redis-clone
+module github.com/hoangNguyenDev3/kache
 
 go 1.21
 

@@ -12,9 +12,16 @@ type Message struct {
 
 // Subscriber represents a subscriber to one or more channels
 type Subscriber struct {
-	ID       string
-	Messages chan Message
-	Done     chan struct{}
+	ID        string
+	Messages  chan Message
+	Done      chan struct{}
+	closeOnce sync.Once
+}
+
+func (s *Subscriber) closeDone() {
+	s.closeOnce.Do(func() {
+		close(s.Done)
+	})
 }
 
 // PubSub represents the pub/sub system
@@ -35,10 +42,21 @@ func (ps *PubSub) Subscribe(subscriberID string, channels ...string) *Subscriber
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
-	subscriber := &Subscriber{
-		ID:       subscriberID,
-		Messages: make(chan Message, 100), // Buffer size of 100
-		Done:     make(chan struct{}),
+	var subscriber *Subscriber
+	// Try to find existing subscriber with the same ID
+	for _, subs := range ps.subscribers {
+		if sub, ok := subs[subscriberID]; ok {
+			subscriber = sub
+			break
+		}
+	}
+
+	if subscriber == nil {
+		subscriber = &Subscriber{
+			ID:       subscriberID,
+			Messages: make(chan Message, 100), // Buffer size of 100
+			Done:     make(chan struct{}),
+		}
 	}
 
 	for _, channel := range channels {
@@ -59,8 +77,18 @@ func (ps *PubSub) Unsubscribe(subscriberID string, channels ...string) {
 	for _, channel := range channels {
 		if subs, ok := ps.subscribers[channel]; ok {
 			if sub, ok := subs[subscriberID]; ok {
-				close(sub.Done)
 				delete(subs, subscriberID)
+				// Only close Done if subscriber is no longer in any channel
+				stillSubscribed := false
+				for _, otherSubs := range ps.subscribers {
+					if _, ok := otherSubs[subscriberID]; ok {
+						stillSubscribed = true
+						break
+					}
+				}
+				if !stillSubscribed {
+					sub.closeDone()
+				}
 			}
 			if len(subs) == 0 {
 				delete(ps.subscribers, channel)
@@ -69,11 +97,12 @@ func (ps *PubSub) Unsubscribe(subscriberID string, channels ...string) {
 	}
 }
 
-// Publish publishes a message to a channel
-func (ps *PubSub) Publish(channel string, data interface{}) {
+// Publish publishes a message to a channel and returns the number of subscribers that received it
+func (ps *PubSub) Publish(channel string, data interface{}) int {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 
+	count := 0
 	if subs, ok := ps.subscribers[channel]; ok {
 		message := Message{
 			Channel: channel,
@@ -87,11 +116,13 @@ func (ps *PubSub) Publish(channel string, data interface{}) {
 				continue
 			case sub.Messages <- message:
 				// Message sent successfully
+				count++
 			default:
 				// Channel is full, skip this subscriber
 			}
 		}
 	}
+	return count
 }
 
 // Pattern represents a pattern subscription
@@ -146,8 +177,18 @@ func (pps *PatternPubSub) PUnsubscribe(subscriberID string, patterns ...string) 
 	for _, pattern := range patterns {
 		if subs, ok := pps.patterns[pattern]; ok {
 			if pat, ok := subs[subscriberID]; ok {
-				close(pat.Subscriber.Done)
 				delete(subs, subscriberID)
+				// Only close Done if subscriber is no longer in any pattern
+				stillSubscribed := false
+				for _, otherSubs := range pps.patterns {
+					if _, ok := otherSubs[subscriberID]; ok {
+						stillSubscribed = true
+						break
+					}
+				}
+				if !stillSubscribed {
+					pat.Subscriber.closeDone()
+				}
 			}
 			if len(subs) == 0 {
 				delete(pps.patterns, pattern)

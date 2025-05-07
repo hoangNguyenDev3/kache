@@ -1,32 +1,13 @@
 package store
 
 import (
-	"encoding/json"
 	"sync"
-	"time"
 )
 
 // Hash represents a Redis hash data structure
 type Hash struct {
-	mu     sync.RWMutex `json:"-" gob:"-"`
+	mu     sync.RWMutex `json:"-"`
 	Fields map[string]string
-}
-
-// GobEncode implements gob.GobEncoder interface
-func (h *Hash) GobEncode() ([]byte, error) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return json.Marshal(h.Fields)
-}
-
-// GobDecode implements gob.GobDecoder interface
-func (h *Hash) GobDecode(data []byte) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.Fields == nil {
-		h.Fields = make(map[string]string)
-	}
-	return json.Unmarshal(data, &h.Fields)
 }
 
 // NewHash creates a new Hash instance
@@ -38,14 +19,15 @@ func NewHash() *Hash {
 
 // HSet sets field in the hash stored at key to value
 func (s *Store) HSet(key, field, value string) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	shard := s.getShard(key)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
 
-	entry, ok := s.data[key]
+	entry, ok := shard.data[key]
 	if !ok {
 		hash := NewHash()
 		hash.Fields[field] = value
-		s.data[key] = &Entry{
+		shard.data[key] = &Entry{
 			Value: hash,
 		}
 
@@ -76,10 +58,11 @@ func (s *Store) HSet(key, field, value string) (bool, error) {
 
 // HGet returns the value associated with field in the hash stored at key
 func (s *Store) HGet(key, field string) (string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	shard := s.getShard(key)
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
 
-	entry, ok := s.data[key]
+	entry, ok := shard.data[key]
 	if !ok {
 		return "", ErrKeyNotFound
 	}
@@ -102,10 +85,11 @@ func (s *Store) HGet(key, field string) (string, error) {
 
 // HDel removes one or more fields from the hash stored at key
 func (s *Store) HDel(key string, fields ...string) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	shard := s.getShard(key)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
 
-	entry, ok := s.data[key]
+	entry, ok := shard.data[key]
 	if !ok {
 		return 0, nil
 	}
@@ -134,10 +118,11 @@ func (s *Store) HDel(key string, fields ...string) (int, error) {
 
 // HGetAll returns all fields and values of the hash stored at key
 func (s *Store) HGetAll(key string) (map[string]string, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	shard := s.getShard(key)
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
 
-	entry, ok := s.data[key]
+	entry, ok := shard.data[key]
 	if !ok {
 		return nil, ErrKeyNotFound
 	}
@@ -160,10 +145,11 @@ func (s *Store) HGetAll(key string) (map[string]string, error) {
 
 // HLen returns the number of fields in the hash stored at key
 func (s *Store) HLen(key string) (int, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	shard := s.getShard(key)
+	shard.mu.RLock()
+	defer shard.mu.RUnlock()
 
-	entry, ok := s.data[key]
+	entry, ok := shard.data[key]
 	if !ok {
 		return 0, ErrKeyNotFound
 	}
@@ -177,11 +163,6 @@ func (s *Store) HLen(key string) (int, error) {
 	defer hash.mu.RUnlock()
 
 	return len(hash.Fields), nil
-}
-
-// Helper function to check if a key has expired
-func isExpired(expiresAt *time.Time) bool {
-	return expiresAt != nil && time.Now().After(*expiresAt)
 }
 
 // GetFields returns a copy of the hash fields

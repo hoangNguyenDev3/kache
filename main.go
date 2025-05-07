@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/hoangNguyenDev3/redis-clone/cmd"
+	"github.com/hoangNguyenDev3/kache/cmd"
 )
 
 func main() {

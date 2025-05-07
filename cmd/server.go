@@ -1,14 +1,16 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/hoangNguyenDev3/redis-clone/server"
-	"github.com/hoangNguyenDev3/redis-clone/store"
+	"github.com/hoangNguyenDev3/kache/pubsub"
+	"github.com/hoangNguyenDev3/kache/server"
+	"github.com/hoangNguyenDev3/kache/store"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -32,6 +34,7 @@ Example: redis-clone server --resp-port 6379 --http-port 8080`,
 	serverCmd.Flags().String("rdb-path", "dump.rdb", "Path to RDB file")
 	serverCmd.Flags().Bool("aof-enabled", true, "Enable AOF persistence")
 	serverCmd.Flags().String("aof-path", "appendonly.aof", "Path to AOF file")
+	serverCmd.Flags().String("aof-fsync", "everysec", "AOF fsync policy (always, everysec, no)")
 
 	// Bind flags to viper
 	viper.BindPFlags(serverCmd.Flags())
@@ -53,6 +56,20 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// Create store
 	s := store.New(storeConfig)
 
+	// Parse AOF fsync policy
+	fsyncStr := viper.GetString("aof-fsync")
+	var fsyncPolicy store.FsyncPolicy
+	switch fsyncStr {
+	case "always":
+		fsyncPolicy = store.FsyncAlways
+	case "everysec":
+		fsyncPolicy = store.FsyncEverySec
+	case "no":
+		fsyncPolicy = store.FsyncNo
+	default:
+		fsyncPolicy = store.FsyncEverySec
+	}
+
 	// Load data from disk if enabled
 	if viper.GetBool("rdb-enabled") {
 		if err := s.LoadRDB(viper.GetString("rdb-path")); err != nil {
@@ -64,13 +81,17 @@ func runServer(cmd *cobra.Command, args []string) error {
 		if err := s.LoadAOF(viper.GetString("aof-path")); err != nil {
 			fmt.Printf("Warning: Failed to load AOF: %v\n", err)
 		}
+		if err := s.EnableAOF(viper.GetString("aof-path"), fsyncPolicy); err != nil {
+			fmt.Printf("Warning: Failed to enable AOF: %v\n", err)
+		}
 	}
 
 	// Start TCP server
 	tcpConfig := &server.Config{
 		ClientTimeout: 30 * time.Second,
 	}
-	tcpServer := server.NewTCPServer(s, tcpConfig)
+	ps := pubsub.New()
+	tcpServer := server.NewTCPServer(s, tcpConfig, ps)
 	go func() {
 		if err := tcpServer.Start(fmt.Sprintf(":%d", viper.GetInt("resp-port"))); err != nil {
 			fmt.Printf("Error starting TCP server: %v\n", err)
@@ -93,7 +114,14 @@ func runServer(cmd *cobra.Command, args []string) error {
 	// Graceful shutdown
 	fmt.Println("Shutting down...")
 	tcpServer.Stop()
-	// HTTP server doesn't have a Stop method, so we'll just let it be terminated
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := httpServer.Shutdown(ctx); err != nil {
+		fmt.Printf("Warning: HTTP server shutdown error: %v\n", err)
+	}
+
+	s.Stop()
 
 	// Save data to disk if enabled
 	if viper.GetBool("rdb-enabled") {

@@ -1,23 +1,27 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/hoangNguyenDev3/redis-clone/store"
+	"github.com/hoangNguyenDev3/kache/store"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // HTTPServer represents an HTTP server that provides a REST API
 type HTTPServer struct {
-	store     *store.Store
-	engine    *gin.Engine
-	authToken string
-	metrics   *Metrics
-	registry  *prometheus.Registry
+	store      *store.Store
+	engine     *gin.Engine
+	authToken  string
+	metrics    *Metrics
+	registry   *prometheus.Registry
+	httpServer *http.Server
+	startTime  time.Time
 }
 
 // Metrics holds Prometheus metrics
@@ -43,6 +47,7 @@ func NewHTTPServer(store *store.Store, authToken string) *HTTPServer {
 		authToken: authToken,
 		metrics:   metrics,
 		registry:  registry,
+		startTime: time.Now(),
 	}
 
 	// Register metrics with the custom registry
@@ -113,7 +118,19 @@ func newMetrics() *Metrics {
 
 // Start starts the HTTP server
 func (s *HTTPServer) Start(addr string) error {
-	return s.engine.Run(addr)
+	s.httpServer = &http.Server{
+		Addr:    addr,
+		Handler: s.engine,
+	}
+	return s.httpServer.ListenAndServe()
+}
+
+// Shutdown gracefully shuts down the HTTP server
+func (s *HTTPServer) Shutdown(ctx context.Context) error {
+	if s.httpServer != nil {
+		return s.httpServer.Shutdown(ctx)
+	}
+	return nil
 }
 
 func (s *HTTPServer) setupRoutes() {
@@ -129,6 +146,14 @@ func (s *HTTPServer) setupRoutes() {
 	// Hash operations
 	auth.POST("/v1/hash/:key", s.setHashField)
 	auth.GET("/v1/hash/:key/:field", s.getHashField)
+
+	// List operations
+	auth.POST("/v1/list/:key/lpush", s.lpushValue)
+	auth.POST("/v1/list/:key/rpush", s.rpushValue)
+	auth.POST("/v1/list/:key/lpop", s.lpopValue)
+	auth.POST("/v1/list/:key/rpop", s.rpopValue)
+	auth.GET("/v1/list/:key/len", s.llenValue)
+	auth.GET("/v1/list/:key/range", s.lrangeValue)
 
 	// Monitoring endpoints
 	s.engine.GET("/metrics", gin.WrapH(promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{})))
@@ -288,6 +313,160 @@ func (s *HTTPServer) getHashField(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"value": value})
 }
 
+func (s *HTTPServer) lpushValue(c *gin.Context) {
+	key := c.Param("key")
+	var req struct {
+		Values []string `json:"values" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.metrics.errorRate.WithLabelValues("lpush_error").Inc()
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	start := time.Now()
+	length, err := s.store.LPush(key, req.Values...)
+	s.metrics.commandLatency.WithLabelValues("lpush").Observe(time.Since(start).Seconds())
+
+	if err != nil {
+		s.metrics.commandsTotal.WithLabelValues("lpush", "error").Inc()
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	s.metrics.commandsTotal.WithLabelValues("lpush", "success").Inc()
+	s.updateKeyspaceSize()
+	c.JSON(http.StatusOK, gin.H{"length": length})
+}
+
+func (s *HTTPServer) rpushValue(c *gin.Context) {
+	key := c.Param("key")
+	var req struct {
+		Values []string `json:"values" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		s.metrics.errorRate.WithLabelValues("rpush_error").Inc()
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	start := time.Now()
+	length, err := s.store.RPush(key, req.Values...)
+	s.metrics.commandLatency.WithLabelValues("rpush").Observe(time.Since(start).Seconds())
+
+	if err != nil {
+		s.metrics.commandsTotal.WithLabelValues("rpush", "error").Inc()
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	s.metrics.commandsTotal.WithLabelValues("rpush", "success").Inc()
+	s.updateKeyspaceSize()
+	c.JSON(http.StatusOK, gin.H{"length": length})
+}
+
+func (s *HTTPServer) lpopValue(c *gin.Context) {
+	key := c.Param("key")
+
+	start := time.Now()
+	val, err := s.store.LPop(key)
+	s.metrics.commandLatency.WithLabelValues("lpop").Observe(time.Since(start).Seconds())
+
+	if err != nil {
+		if err == store.ErrKeyNotFound {
+			s.metrics.commandsTotal.WithLabelValues("lpop", "miss").Inc()
+			c.Status(http.StatusNotFound)
+			return
+		}
+		s.metrics.commandsTotal.WithLabelValues("lpop", "error").Inc()
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	s.metrics.commandsTotal.WithLabelValues("lpop", "success").Inc()
+	s.updateKeyspaceSize()
+	c.JSON(http.StatusOK, gin.H{"value": val})
+}
+
+func (s *HTTPServer) rpopValue(c *gin.Context) {
+	key := c.Param("key")
+
+	start := time.Now()
+	val, err := s.store.RPop(key)
+	s.metrics.commandLatency.WithLabelValues("rpop").Observe(time.Since(start).Seconds())
+
+	if err != nil {
+		if err == store.ErrKeyNotFound {
+			s.metrics.commandsTotal.WithLabelValues("rpop", "miss").Inc()
+			c.Status(http.StatusNotFound)
+			return
+		}
+		s.metrics.commandsTotal.WithLabelValues("rpop", "error").Inc()
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	s.metrics.commandsTotal.WithLabelValues("rpop", "success").Inc()
+	s.updateKeyspaceSize()
+	c.JSON(http.StatusOK, gin.H{"value": val})
+}
+
+func (s *HTTPServer) llenValue(c *gin.Context) {
+	key := c.Param("key")
+
+	start := time.Now()
+	length, err := s.store.LLen(key)
+	s.metrics.commandLatency.WithLabelValues("llen").Observe(time.Since(start).Seconds())
+
+	if err != nil {
+		s.metrics.commandsTotal.WithLabelValues("llen", "error").Inc()
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	s.metrics.commandsTotal.WithLabelValues("llen", "success").Inc()
+	c.JSON(http.StatusOK, gin.H{"length": length})
+}
+
+func (s *HTTPServer) lrangeValue(c *gin.Context) {
+	key := c.Param("key")
+
+	startStr := c.Query("start")
+	stopStr := c.Query("stop")
+
+	start, err := strconv.Atoi(startStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start parameter"})
+		return
+	}
+
+	stop, err := strconv.Atoi(stopStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid stop parameter"})
+		return
+	}
+
+	startTime := time.Now()
+	values, err := s.store.LRange(key, start, stop)
+	s.metrics.commandLatency.WithLabelValues("lrange").Observe(time.Since(startTime).Seconds())
+
+	if err != nil {
+		if err == store.ErrKeyNotFound {
+			s.metrics.commandsTotal.WithLabelValues("lrange", "miss").Inc()
+			c.Status(http.StatusNotFound)
+			return
+		}
+		s.metrics.commandsTotal.WithLabelValues("lrange", "error").Inc()
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	s.metrics.commandsTotal.WithLabelValues("lrange", "success").Inc()
+	c.JSON(http.StatusOK, gin.H{"values": values})
+}
+
 func (s *HTTPServer) getStats(c *gin.Context) {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
@@ -302,7 +481,7 @@ func (s *HTTPServer) getStats(c *gin.Context) {
 
 	// Simplified statistics without replication info
 	stats := map[string]interface{}{
-		"uptime":            time.Since(startTime).Seconds(),
+		"uptime":            time.Since(s.startTime).Seconds(),
 		"connected_clients": connectionCount,
 		"keyspace_size":     len(s.store.Keys("*")),
 		"memory_usage":      mem.Alloc,
@@ -320,6 +499,3 @@ func (s *HTTPServer) Engine() *gin.Engine {
 func (s *HTTPServer) Store() *store.Store {
 	return s.store
 }
-
-// Store the server start time
-var startTime = time.Now()
