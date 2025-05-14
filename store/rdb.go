@@ -1,3 +1,16 @@
+// Package store implements a sharded concurrent in-memory key-value store.
+//
+// RDB binary format:
+//   - Magic bytes: "KACHE" (5 bytes)
+//   - Version byte: 1 (1 byte)
+//   - Repeating entries until EOF:
+//     key length    (uint32 BE)
+//     key bytes
+//     type byte     (0=string, 1=int64, 2=hash, 3=list)
+//     value length  (uint32 BE)
+//     value bytes
+//     has_expiry    (1 byte: 0 or 1)
+//     [expiry ns    (int64 BE) only if has_expiry == 1]
 package store
 
 import (
@@ -6,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"time"
 )
@@ -13,12 +27,16 @@ import (
 const rdbMagic = "KACHE"
 const rdbVersion = 1
 
+// rdbEntry is an internal helper used during RDB serialization.
 type rdbEntry struct {
 	key   string
 	entry *Entry
 }
 
-// SaveRDB saves the current state to an RDB file using a custom binary format
+// SaveRDB writes the current store state to an RDB file using a custom binary
+// format (see package docs). It iterates over shards progressively, acquiring
+// a read lock on one shard at a time to avoid blocking writers across the
+// entire store. Expired entries are skipped.
 func (s *Store) SaveRDB(filename string) error {
 	file, err := os.Create(filename)
 	if err != nil {
@@ -57,6 +75,7 @@ func (s *Store) SaveRDB(filename string) error {
 		}
 	}
 
+	slog.Info("rdb snapshot saved", "keys", len(allEntries), "path", filename, "component", "rdb")
 	return nil
 }
 
@@ -158,7 +177,10 @@ func serializeHash(h *Hash) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// LoadRDB loads the state from an RDB file
+// LoadRDB loads the store state from an RDB file, validating the magic
+// header and version byte. It clears all existing data before loading and
+// skips any entries that have already expired. Each entry is inserted into
+// its target shard under the shard's write lock.
 func (s *Store) LoadRDB(filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -188,6 +210,7 @@ func (s *Store) LoadRDB(filename string) error {
 	}
 
 	// Read entries until EOF
+	keyCount := 0
 	for {
 		key, entry, err := readEntry(file)
 		if err != nil {
@@ -208,8 +231,10 @@ func (s *Store) LoadRDB(filename string) error {
 		shard.mu.Lock()
 		shard.data[key] = entry
 		shard.mu.Unlock()
+		keyCount++
 	}
 
+	slog.Info("rdb file loaded", "keys", keyCount, "path", filename, "component", "rdb")
 	return nil
 }
 

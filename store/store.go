@@ -1,3 +1,19 @@
+// Package store implements a sharded concurrent in-memory key-value store with
+// support for multiple data types, TTL-based expiration, and persistence.
+//
+// Concurrency model:
+//   - The store is partitioned into 16 shards; each shard protects its map with
+//     an independent sync.RWMutex. This design reduces lock contention under
+//     high concurrency compared to a single global lock.
+//   - Keys are assigned to shards using the FNV-1a 32-bit hash of the key
+//     modulo NumShards.
+//   - Expired keys are removed via a combination of lazy deletion on access
+//     (Get, Incr) and a background active expiry goroutine that samples keys
+//     in each shard.
+//
+// Persistence:
+//   - RDB snapshots write the entire dataset to a custom binary file.
+//   - AOF journaling logs every mutating command in RESP format.
 package store
 
 import (
@@ -12,7 +28,7 @@ import (
 	"github.com/hoangNguyenDev3/kache/resp"
 )
 
-// Create some error constants
+// Exported error values returned by Store operations.
 var (
 	ErrKeyNotFound = fmt.Errorf("key not found")
 	ErrKeyExpired  = fmt.Errorf("key expired")
@@ -20,22 +36,24 @@ var (
 	ErrWrongNode   = fmt.Errorf("wrong node")
 )
 
-// NumShards is the number of shards in the store
+// NumShards is the number of shards in the store.
 const NumShards = 16
 
-// Entry represents a value stored in the database
+// Entry represents a value stored in the database with an optional expiration time.
 type Entry struct {
 	Value     interface{}
 	ExpiresAt *time.Time
 }
 
-// Shard holds a portion of the data store
+// Shard holds a portion of the data store protected by its own RWMutex.
 type Shard struct {
 	data map[string]*Entry
 	mu   sync.RWMutex
 }
 
-// Store holds the main data store
+// Store represents a sharded concurrent in-memory key-value store.
+// It supports strings, hashes, lists, TTL-based expiration, atomic
+// increment, and optional AOF/RDB persistence.
 type Store struct {
 	shards [NumShards]*Shard
 	aof    *AOFWriter
@@ -45,14 +63,17 @@ type Store struct {
 	aofMu  sync.Mutex
 }
 
-// StoreConfig holds configuration for the store
+// StoreConfig holds configuration for the store, including persistence paths
+// and the interval between active expiry garbage-collection passes.
 type StoreConfig struct {
 	AOFPath    string
 	RDBPath    string
 	GCInterval time.Duration
 }
 
-// New creates a new store
+// New creates and initializes a new Store with the given configuration.
+// It allocates NumShards shards and starts a background active expiry
+// goroutine when config is nil or GCInterval is non-negative.
 func New(config *StoreConfig) *Store {
 	s := &Store{
 		config: config,
@@ -72,7 +93,10 @@ func New(config *StoreConfig) *Store {
 	return s
 }
 
-// getShard returns the shard for a given key using FNV-1a hashing
+// getShard returns the shard for a given key using FNV-1a hashing.
+// The hash is computed over the raw key bytes and reduced modulo NumShards
+// to select the target shard. This keeps related keys colocated and
+// distributes load evenly across shards.
 func (s *Store) getShard(key string) *Shard {
 	h := fnv.New32a()
 	h.Write([]byte(key))
@@ -80,7 +104,8 @@ func (s *Store) getShard(key string) *Shard {
 	return s.shards[hashValue%NumShards]
 }
 
-// Set sets a key with a value and optional expiry
+// Set stores a key with the given value and optional expiry time.
+// It is safe for concurrent use by multiple goroutines.
 func (s *Store) Set(key string, value interface{}, expiry *time.Time) error {
 	shard := s.getShard(key)
 	shard.mu.Lock()
@@ -106,7 +131,10 @@ func (s *Store) Set(key string, value interface{}, expiry *time.Time) error {
 	return nil
 }
 
-// Get retrieves a value by key
+// Get retrieves the value associated with key.
+// It performs lazy deletion: if the key has expired, Get returns
+// ErrKeyExpired without removing the key from the shard.
+// It is safe for concurrent use by multiple goroutines.
 func (s *Store) Get(key string) (interface{}, error) {
 	shard := s.getShard(key)
 	shard.mu.RLock()
@@ -126,7 +154,9 @@ func (s *Store) Get(key string) (interface{}, error) {
 	return entry.Value, nil
 }
 
-// Incr increments a numeric key
+// Incr atomically increments the numeric value stored at key by one.
+// If the key does not exist, it is initialized to 1. The operation is
+// performed under the shard's write lock so it is safe for concurrent use.
 func (s *Store) Incr(key string) (int64, error) {
 	shard := s.getShard(key)
 	shard.mu.Lock()
@@ -202,7 +232,9 @@ func (s *Store) Incr(key string) (int64, error) {
 	}
 }
 
-// Del deletes one or more keys
+// Del deletes one or more keys and returns the number of keys removed.
+// Each key is locked individually at the shard level; the operation is
+// safe for concurrent use by multiple goroutines.
 func (s *Store) Del(keys ...string) (int, error) {
 	count := 0
 	for _, key := range keys {
@@ -221,7 +253,8 @@ func (s *Store) Del(keys ...string) (int, error) {
 	return count, nil
 }
 
-// Expire sets a timeout on a key
+// Expire sets a TTL on an existing key. It returns true if the timeout
+// was set, or false if the key does not exist.
 func (s *Store) Expire(key string, duration time.Duration) bool {
 	shard := s.getShard(key)
 	shard.mu.Lock()
@@ -237,7 +270,9 @@ func (s *Store) Expire(key string, duration time.Duration) bool {
 	return true
 }
 
-// TTL returns the remaining time to live of a key
+// TTL returns the remaining time to live of a key.
+// It returns -2s if the key does not exist, -1s if the key exists
+// but has no expiry, and a positive duration otherwise.
 func (s *Store) TTL(key string) time.Duration {
 	shard := s.getShard(key)
 	shard.mu.RLock()
@@ -260,7 +295,10 @@ func (s *Store) TTL(key string) time.Duration {
 	return remaining
 }
 
-// Keys returns all keys matching the given pattern
+// Keys returns all non-expired keys in the store.
+// The pattern argument is currently reserved; all keys are returned.
+// It is safe for concurrent use because it acquires a read lock on
+// each shard while iterating.
 func (s *Store) Keys(pattern string) []string {
 	keys := make([]string, 0)
 
@@ -279,7 +317,8 @@ func (s *Store) Keys(pattern string) []string {
 	return keys
 }
 
-// GC removes expired keys and returns the number of keys removed
+// GC scans all shards and removes expired keys, returning the number
+// of keys deleted. It acquires a write lock on each shard sequentially.
 func (s *Store) GC() int {
 	now := time.Now()
 	removed := 0
@@ -354,7 +393,7 @@ func (s *Store) activeExpiry() {
 	}
 }
 
-// Stop stops background goroutines and closes the AOF writer
+// Stop signals background goroutines to exit and closes the AOF writer.
 func (s *Store) Stop() {
 	close(s.done)
 	if s.aof != nil {
@@ -362,7 +401,8 @@ func (s *Store) Stop() {
 	}
 }
 
-// SaveRDBBackground launches SaveRDB in a goroutine
+// SaveRDBBackground launches SaveRDB in a background goroutine.
+// If a save is already in progress, the call is ignored.
 func (s *Store) SaveRDBBackground() {
 	go func() {
 		if !s.rdbMu.TryLock() {
@@ -375,7 +415,10 @@ func (s *Store) SaveRDBBackground() {
 	}()
 }
 
-// RewriteAOF rewrites the AOF file to remove redundant operations
+// RewriteAOF creates a new, compacted AOF file from the current dataset.
+// It writes a temporary file, syncs it to disk, then atomically replaces
+// the old AOF file via os.Rename. During the rewrite each shard is read
+// locked individually to minimize write disruption.
 func (s *Store) RewriteAOF() error {
 	if s.aof == nil {
 		return nil
@@ -462,7 +505,8 @@ func (s *Store) RewriteAOF() error {
 	return nil
 }
 
-// RewriteAOFBackground launches RewriteAOF in a goroutine
+// RewriteAOFBackground launches RewriteAOF in a background goroutine.
+// If a rewrite is already in progress, the call is ignored.
 func (s *Store) RewriteAOFBackground() {
 	go func() {
 		if !s.aofMu.TryLock() {
@@ -473,14 +517,16 @@ func (s *Store) RewriteAOFBackground() {
 	}()
 }
 
-// LockAll locks all shards in order (for transactions)
+// LockAll acquires a write lock on every shard in ascending order.
+// It is used internally to provide atomicity for MULTI/EXEC transactions.
 func (s *Store) LockAll() {
 	for i := 0; i < NumShards; i++ {
 		s.shards[i].mu.Lock()
 	}
 }
 
-// UnlockAll unlocks all shards in reverse order
+// UnlockAll releases the write lock on every shard in descending order.
+// It must be paired with a prior LockAll call.
 func (s *Store) UnlockAll() {
 	for i := NumShards - 1; i >= 0; i-- {
 		s.shards[i].mu.Unlock()

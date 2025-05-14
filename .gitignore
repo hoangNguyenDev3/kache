@@ -8,17 +8,22 @@
 *.so
 *.dylib
 redis-clone
+kache
 
 # Test binary, built with `go test -c`
 *.test
+tests/tests.test
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+coverage.out
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
 # Redis persistence files
+*.rdb
+*.aof
 dump.rdb
 appendonly.aof
 

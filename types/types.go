@@ -1,10 +1,11 @@
+// Package types defines the core data types used throughout the Kache in-memory store.
 package types
 
 import (
 	"time"
 )
 
-// Command represents a store operation
+// Command represents a store operation with an optional expiration time.
 type Command struct {
 	Operation string      `json:"op"`
 	Key       string      `json:"key"`
@@ -13,7 +14,7 @@ type Command struct {
 	ExpiresAt *time.Time  `json:"expires_at,omitempty"`
 }
 
-// Store interface defines the methods that must be implemented by a store
+// Store defines the methods that must be implemented by a Kache store backend.
 type Store interface {
 	Set(key string, value interface{}, expiresAt *time.Time) error
 	Get(key string) (interface{}, error)
@@ -27,7 +28,7 @@ type Store interface {
 	Expire(key string, duration time.Duration) bool
 }
 
-// Entry represents a value stored in the database
+// Entry represents a value stored in the database with an optional expiration time.
 type Entry struct {
 	Value     interface{}
 	ExpiresAt *time.Time

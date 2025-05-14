@@ -1,16 +1,21 @@
+// Package pubsub implements a channel-based publish/subscribe messaging system
+// compatible with Redis Pub/Sub commands. Subscribers receive Messages via a
+// buffered channel and are notified of closure through the Done channel.
 package pubsub
 
 import (
 	"sync"
 )
 
-// Message represents a message in the pub/sub system
+// Message represents a message published to a channel.
 type Message struct {
 	Channel string
 	Data    interface{}
 }
 
-// Subscriber represents a subscriber to one or more channels
+// Subscriber represents a client subscribed to one or more channels.
+// Messages are delivered on the Messages channel. The Done channel is closed
+// when the subscriber is fully unsubscribed from all channels.
 type Subscriber struct {
 	ID        string
 	Messages  chan Message
@@ -24,20 +29,23 @@ func (s *Subscriber) closeDone() {
 	})
 }
 
-// PubSub represents the pub/sub system
+// PubSub manages channel-based subscriptions. It maps channel names to
+// subscribers and is safe for concurrent use.
 type PubSub struct {
 	mu          sync.RWMutex
 	subscribers map[string]map[string]*Subscriber // channel -> subscriberID -> subscriber
 }
 
-// New creates a new PubSub instance
+// New creates and returns a new PubSub manager.
 func New() *PubSub {
 	return &PubSub{
 		subscribers: make(map[string]map[string]*Subscriber),
 	}
 }
 
-// Subscribe subscribes to one or more channels
+// Subscribe adds the subscriber to the given channels, creating the subscriber
+// if it does not already exist. It returns the Subscriber whose Messages
+// channel will receive published data. It is safe for concurrent use.
 func (ps *PubSub) Subscribe(subscriberID string, channels ...string) *Subscriber {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -69,7 +77,9 @@ func (ps *PubSub) Subscribe(subscriberID string, channels ...string) *Subscriber
 	return subscriber
 }
 
-// Unsubscribe unsubscribes from one or more channels
+// Unsubscribe removes the subscriber from the given channels. If the
+// subscriber is no longer subscribed to any channel, its Done channel is
+// closed. It is safe for concurrent use.
 func (ps *PubSub) Unsubscribe(subscriberID string, channels ...string) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
@@ -97,7 +107,9 @@ func (ps *PubSub) Unsubscribe(subscriberID string, channels ...string) {
 	}
 }
 
-// Publish publishes a message to a channel and returns the number of subscribers that received it
+// Publish sends data to all subscribers of channel. It returns the number
+// of subscribers that successfully received the message. Subscribers with a
+// full Messages buffer are skipped. It is safe for concurrent use.
 func (ps *PubSub) Publish(channel string, data interface{}) int {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
@@ -125,19 +137,19 @@ func (ps *PubSub) Publish(channel string, data interface{}) int {
 	return count
 }
 
-// Pattern represents a pattern subscription
+// Pattern associates a glob-style pattern with a Subscriber.
 type Pattern struct {
 	Pattern    string
 	Subscriber *Subscriber
 }
 
-// PatternPubSub represents the pattern-based pub/sub system
+// PatternPubSub extends PubSub with pattern-based subscriptions.
 type PatternPubSub struct {
 	PubSub
 	patterns map[string]map[string]*Pattern // pattern -> subscriberID -> pattern
 }
 
-// NewPattern creates a new PatternPubSub instance
+// NewPattern creates and returns a new PatternPubSub manager.
 func NewPattern() *PatternPubSub {
 	return &PatternPubSub{
 		PubSub:   *New(),
@@ -145,7 +157,9 @@ func NewPattern() *PatternPubSub {
 	}
 }
 
-// PSubscribe subscribes to channels matching the given patterns
+// PSubscribe registers pattern subscriptions for subscriberID. The returned
+// Subscriber will receive messages published to channels matching any of the
+// patterns. It is safe for concurrent use.
 func (pps *PatternPubSub) PSubscribe(subscriberID string, patterns ...string) *Subscriber {
 	pps.mu.Lock()
 	defer pps.mu.Unlock()
@@ -169,7 +183,9 @@ func (pps *PatternPubSub) PSubscribe(subscriberID string, patterns ...string) *S
 	return subscriber
 }
 
-// PUnsubscribe unsubscribes from the given patterns
+// PUnsubscribe removes pattern subscriptions for subscriberID. If the
+// subscriber is no longer subscribed to any pattern, its Done channel is
+// closed. It is safe for concurrent use.
 func (pps *PatternPubSub) PUnsubscribe(subscriberID string, patterns ...string) {
 	pps.mu.Lock()
 	defer pps.mu.Unlock()

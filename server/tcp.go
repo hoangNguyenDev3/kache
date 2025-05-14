@@ -1,10 +1,14 @@
+// Package server implements TCP (RESP protocol) and HTTP/REST API servers
+// for the Kache data store. The TCP server handles Redis-compatible commands
+// including strings, hashes, lists, pub/sub, and MULTI/EXEC transactions.
 package server
 
 import (
 	"bufio"
+	"crypto/tls"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"strconv"
 	"strings"
@@ -16,7 +20,7 @@ import (
 	"github.com/hoangNguyenDev3/kache/store"
 )
 
-// Client represents a connected client
+// Client represents a connected TCP client and its session state.
 type Client struct {
 	conn          net.Conn
 	server        *TCPServer
@@ -25,23 +29,25 @@ type Client struct {
 	txQueue       []resp.Value
 }
 
-// TCPServer represents a TCP server that handles RESP protocol
+// TCPServer accepts TCP connections and processes RESP protocol commands.
+// It supports pipelining, transactions, pub/sub, and automatic client timeouts.
 type TCPServer struct {
 	listener net.Listener
 	store    *store.Store
 	clients  sync.Map
 	config   *Config
-	logger   *log.Logger
 	done     chan struct{}
 	pubsub   *pubsub.PubSub
 }
 
-// Config holds TCP server configuration
+// Config holds TCP server configuration.
 type Config struct {
 	ClientTimeout time.Duration
+	TLSConfig     *tls.Config
 }
 
-// NewTCPServer creates a new TCP server
+// NewTCPServer creates and returns a new TCPServer backed by the given store.
+// If ps is nil, a new PubSub instance is created automatically.
 func NewTCPServer(store *store.Store, config *Config, ps *pubsub.PubSub) *TCPServer {
 	if ps == nil {
 		ps = pubsub.New()
@@ -49,13 +55,13 @@ func NewTCPServer(store *store.Store, config *Config, ps *pubsub.PubSub) *TCPSer
 	return &TCPServer{
 		store:  store,
 		config: config,
-		logger: log.New(log.Writer(), "[TCP] ", log.LstdFlags),
 		done:   make(chan struct{}),
 		pubsub: ps,
 	}
 }
 
-// Start starts the TCP server
+// Start binds the TCP server to addr and begins accepting connections.
+// It returns immediately; connections are handled in background goroutines.
 func (s *TCPServer) Start(addr string) error {
 	var err error
 	s.listener, err = net.Listen("tcp", addr)
@@ -63,13 +69,19 @@ func (s *TCPServer) Start(addr string) error {
 		return fmt.Errorf("failed to start TCP server: %w", err)
 	}
 
-	s.logger.Printf("TCP server listening on %s", addr)
+	if s.config.TLSConfig != nil {
+		s.listener = tls.NewListener(s.listener, s.config.TLSConfig)
+		slog.Info("tcp server listening with TLS", "addr", addr, "component", "tcp")
+	} else {
+		slog.Info("tcp server listening", "addr", addr, "component", "tcp")
+	}
 
 	go s.acceptConnections()
 	return nil
 }
 
-// Stop stops the TCP server
+// Stop signals the server to shut down, closes all client connections,
+// and releases the listener.
 func (s *TCPServer) Stop() error {
 	// Signal shutdown
 	close(s.done)
@@ -105,7 +117,7 @@ func (s *TCPServer) acceptConnections() {
 				case <-s.done:
 					return
 				default:
-					s.logger.Printf("Failed to accept connection: %v", err)
+					slog.Error("failed to accept connection", "error", err, "component", "tcp")
 				}
 				return
 			}

@@ -1,3 +1,6 @@
+// Package resp implements the Redis Serialization Protocol (RESP) parser and
+// serializer for wire-format communication. It supports RESP2 simple strings,
+// errors, integers, bulk strings, and arrays.
 package resp
 
 import (
@@ -10,6 +13,7 @@ import (
 	"strconv"
 )
 
+// RESP type prefixes.
 const (
 	SimpleString = '+'
 	Error        = '-'
@@ -18,17 +22,21 @@ const (
 	Array        = '*'
 )
 
+// RESP safety limits.
 const (
 	MaxArrayLength      = 1048576           // 1M elements max per array
 	MaxBulkStringLength = 512 * 1024 * 1024 // 512MB max per bulk string
 )
 
 var (
+	// ErrInvalidSyntax is returned when the input does not conform to RESP.
 	ErrInvalidSyntax = errors.New("invalid RESP syntax")
-	CRLF             = []byte{'\r', '\n'}
+	// CRLF is the RESP line terminator.
+	CRLF = []byte{'\r', '\n'}
 )
 
-// Value represents a RESP value
+// Value represents a parsed RESP value. The Type field indicates which
+// union member is valid.
 type Value struct {
 	Type  byte
 	Str   string
@@ -37,32 +45,32 @@ type Value struct {
 	Err   error
 }
 
-// NewSimpleString creates a new RESP simple string
+// NewSimpleString returns a RESP simple string value.
 func NewSimpleString(s string) Value {
 	return Value{Type: SimpleString, Str: s}
 }
 
-// NewError creates a new RESP error
+// NewError returns a RESP error value.
 func NewError(err error) Value {
 	return Value{Type: Error, Err: err}
 }
 
-// NewInteger creates a new RESP integer
+// NewInteger returns a RESP integer value.
 func NewInteger(i int64) Value {
 	return Value{Type: Integer, Int: i}
 }
 
-// NewBulkString creates a new RESP bulk string
+// NewBulkString returns a RESP bulk string value.
 func NewBulkString(s string) Value {
 	return Value{Type: BulkString, Str: s}
 }
 
-// NewArray creates a new RESP array
+// NewArray returns a RESP array value.
 func NewArray(a []Value) Value {
 	return Value{Type: Array, Array: a}
 }
 
-// Marshal serializes a Value into RESP format
+// Marshal serializes the Value into RESP wire format.
 func (v Value) Marshal() []byte {
 	buf := bytes.Buffer{}
 
@@ -97,7 +105,8 @@ func (v Value) Marshal() []byte {
 	return buf.Bytes()
 }
 
-// Parse reads a RESP value from a reader
+// Parse reads and parses a single RESP value from r. It supports simple
+// strings, errors, integers, bulk strings, and arrays.
 func Parse(r *bufio.Reader) (Value, error) {
 	// Read the type byte
 	typ, err := r.ReadByte()
@@ -223,7 +232,7 @@ func parseArray(r *bufio.Reader) (Value, error) {
 	return NewArray(array), nil
 }
 
-// readLine reads until CRLF and returns the line without CRLF
+// readLine reads until CRLF and returns the line without the terminator.
 func readLine(r *bufio.Reader) ([]byte, error) {
 	line, err := r.ReadBytes('\n')
 	if err != nil {
@@ -237,31 +246,32 @@ func readLine(r *bufio.Reader) ([]byte, error) {
 	return line[:len(line)-2], nil
 }
 
-// Write writes a RESP value to the writer
+// Write serializes value and writes it to w.
 func Write(w io.Writer, value *Value) error {
 	_, err := w.Write(value.Marshal())
 	return err
 }
 
-// WriteError writes a RESP error to the writer
+// WriteError writes a RESP error value with the given message to w.
 func WriteError(w io.Writer, message string) error {
 	_, err := w.Write(NewError(fmt.Errorf(message)).Marshal())
 	return err
 }
 
-// Reader reads RESP commands from a connection
+// Reader wraps a net.Conn and provides buffered RESP command reading.
 type Reader struct {
 	reader *bufio.Reader
 }
 
-// NewReader creates a new RESP reader
+// NewReader creates a new RESP Reader for the given connection.
 func NewReader(conn net.Conn) *Reader {
 	return &Reader{
 		reader: bufio.NewReader(conn),
 	}
 }
 
-// ReadCommand reads a command from the reader
+// ReadCommand reads a single RESP array from the connection and returns
+// the command and its arguments as a slice of strings.
 func (r *Reader) ReadCommand() ([]string, error) {
 	value, err := Parse(r.reader)
 	if err != nil {
@@ -283,7 +293,7 @@ func (r *Reader) ReadCommand() ([]string, error) {
 	return result, nil
 }
 
-// FormatCommand formats a command as a RESP array
+// FormatCommand formats a slice of strings as a RESP array of bulk strings.
 func FormatCommand(cmd []string) []byte {
 	array := make([]Value, len(cmd))
 	for i, s := range cmd {

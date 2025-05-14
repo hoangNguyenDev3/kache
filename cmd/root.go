@@ -1,7 +1,8 @@
+// Package cmd provides the Cobra CLI commands for the Kache server.
 package cmd
 
 import (
-	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -22,7 +23,7 @@ var (
 	}
 )
 
-// Execute adds all child commands to the root command and sets flags appropriately.
+// Execute runs the root command and returns any error.
 func Execute() error {
 	return rootCmd.Execute()
 }
@@ -32,8 +33,14 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.redis-clone.yaml)")
 	rootCmd.PersistentFlags().String("log-level", "info", "logging level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().Bool("tls-enabled", false, "Enable TLS for both servers")
+	rootCmd.PersistentFlags().String("tls-cert", "", "Path to TLS certificate file")
+	rootCmd.PersistentFlags().String("tls-key", "", "Path to TLS private key file")
 
 	viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level"))
+	viper.BindPFlag("tls.enabled", rootCmd.PersistentFlags().Lookup("tls-enabled"))
+	viper.BindPFlag("tls.cert", rootCmd.PersistentFlags().Lookup("tls-cert"))
+	viper.BindPFlag("tls.key", rootCmd.PersistentFlags().Lookup("tls-key"))
 }
 
 func initConfig() {
@@ -51,6 +58,6 @@ func initConfig() {
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err == nil {
-		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+		slog.Info("using config file", "path", viper.ConfigFileUsed())
 	}
 }

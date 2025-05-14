@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"runtime"
 	"strconv"
 	"time"
@@ -13,7 +15,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// HTTPServer represents an HTTP server that provides a REST API
+// HTTPServer provides a REST API over the Kache store, backed by the
+// Gin framework. It exposes key-value, hash, and list operations as well
+// as Prometheus-compatible metrics and runtime statistics.
 type HTTPServer struct {
 	store      *store.Store
 	engine     *gin.Engine
@@ -22,9 +26,11 @@ type HTTPServer struct {
 	registry   *prometheus.Registry
 	httpServer *http.Server
 	startTime  time.Time
+	certFile   string
+	keyFile    string
 }
 
-// Metrics holds Prometheus metrics
+// Metrics holds Prometheus metrics exported by the HTTP server.
 type Metrics struct {
 	commandsTotal    *prometheus.CounterVec
 	commandLatency   *prometheus.HistogramVec
@@ -35,7 +41,8 @@ type Metrics struct {
 	keyspaceSize     prometheus.Gauge
 }
 
-// NewHTTPServer creates a new HTTP server instance
+// NewHTTPServer creates and returns a new HTTPServer backed by the given store.
+// The authToken is required via the Authorization header for all mutating routes.
 func NewHTTPServer(store *store.Store, authToken string) *HTTPServer {
 	gin.SetMode(gin.ReleaseMode)
 	registry := prometheus.NewRegistry()
@@ -116,16 +123,30 @@ func newMetrics() *Metrics {
 	}
 }
 
-// Start starts the HTTP server
+// SetTLS configures TLS certificate and key files for the HTTP server.
+func (s *HTTPServer) SetTLS(certFile, keyFile string) {
+	s.certFile = certFile
+	s.keyFile = keyFile
+}
+
+// Start binds the HTTP server to addr and blocks while serving requests.
 func (s *HTTPServer) Start(addr string) error {
+	if s.certFile != "" && s.keyFile != "" {
+		slog.Info("http server listening with TLS", "addr", addr, "component", "http")
+	} else {
+		slog.Info("http server listening", "addr", addr, "component", "http")
+	}
 	s.httpServer = &http.Server{
 		Addr:    addr,
 		Handler: s.engine,
 	}
+	if s.certFile != "" && s.keyFile != "" {
+		return s.httpServer.ListenAndServeTLS(s.certFile, s.keyFile)
+	}
 	return s.httpServer.ListenAndServe()
 }
 
-// Shutdown gracefully shuts down the HTTP server
+// Shutdown gracefully shuts down the HTTP server with the given context.
 func (s *HTTPServer) Shutdown(ctx context.Context) error {
 	if s.httpServer != nil {
 		return s.httpServer.Shutdown(ctx)
@@ -157,7 +178,21 @@ func (s *HTTPServer) setupRoutes() {
 
 	// Monitoring endpoints
 	s.engine.GET("/metrics", gin.WrapH(promhttp.HandlerFor(s.registry, promhttp.HandlerOpts{})))
+	s.engine.GET("/health", s.getHealth)
 	auth.GET("/stats", s.getStats)
+
+	// pprof profiling endpoints
+	s.engine.GET("/debug/pprof/", gin.WrapF(pprof.Index))
+	s.engine.GET("/debug/pprof/cmdline", gin.WrapF(pprof.Cmdline))
+	s.engine.GET("/debug/pprof/profile", gin.WrapF(pprof.Profile))
+	s.engine.GET("/debug/pprof/symbol", gin.WrapF(pprof.Symbol))
+	s.engine.GET("/debug/pprof/trace", gin.WrapF(pprof.Trace))
+	s.engine.GET("/debug/pprof/allocs", gin.WrapH(pprof.Handler("allocs")))
+	s.engine.GET("/debug/pprof/heap", gin.WrapH(pprof.Handler("heap")))
+	s.engine.GET("/debug/pprof/goroutine", gin.WrapH(pprof.Handler("goroutine")))
+	s.engine.GET("/debug/pprof/block", gin.WrapH(pprof.Handler("block")))
+	s.engine.GET("/debug/pprof/mutex", gin.WrapH(pprof.Handler("mutex")))
+	s.engine.GET("/debug/pprof/threadcreate", gin.WrapH(pprof.Handler("threadcreate")))
 }
 
 func (s *HTTPServer) authMiddleware() gin.HandlerFunc {
@@ -467,6 +502,16 @@ func (s *HTTPServer) lrangeValue(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"values": values})
 }
 
+func (s *HTTPServer) getHealth(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status":         "ok",
+		"version":        "dev",
+		"uptime_seconds": time.Since(s.startTime).Seconds(),
+		"go_version":     runtime.Version(),
+		"goroutines":     runtime.NumGoroutine(),
+	})
+}
+
 func (s *HTTPServer) getStats(c *gin.Context) {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
@@ -490,12 +535,12 @@ func (s *HTTPServer) getStats(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
-// Engine returns the underlying Gin engine
+// Engine returns the underlying Gin engine for testing or middleware injection.
 func (s *HTTPServer) Engine() *gin.Engine {
 	return s.engine
 }
 
-// Store returns the underlying store
+// Store returns the Kache store instance used by the HTTP server.
 func (s *HTTPServer) Store() *store.Store {
 	return s.store
 }

@@ -1,9 +1,17 @@
+// Package store implements a sharded concurrent in-memory key-value store.
+//
+// AOF format:
+// The Append-Only File is a sequence of RESP arrays, one per mutating command.
+// Each array contains the command name and its arguments as bulk strings.
+// On startup the AOF is replayed by parsing each RESP array and invoking the
+// corresponding store method, reconstructing the dataset.
 package store
 
 import (
 	"bufio"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strconv"
 	"sync"
@@ -12,15 +20,32 @@ import (
 	"github.com/hoangNguyenDev3/kache/resp"
 )
 
+// FsyncPolicy controls the durability/performance trade-off for AOF writes.
 type FsyncPolicy int
 
 const (
-	FsyncAlways   FsyncPolicy = iota // fsync after every write
-	FsyncEverySec                    // fsync once per second via background goroutine
-	FsyncNo                          // let OS handle it
+	// FsyncAlways fsyncs after every write. Highest durability, lowest throughput.
+	FsyncAlways FsyncPolicy = iota
+	// FsyncEverySec fsyncs once per second via a background goroutine.
+	FsyncEverySec
+	// FsyncNo lets the operating system handle flushing. Highest throughput.
+	FsyncNo
 )
 
-// AOFWriter handles append-only file operations
+func (p FsyncPolicy) String() string {
+	switch p {
+	case FsyncAlways:
+		return "always"
+	case FsyncEverySec:
+		return "everysec"
+	case FsyncNo:
+		return "no"
+	default:
+		return "unknown"
+	}
+}
+
+// AOFWriter handles append-only file operations. It is safe for concurrent use.
 type AOFWriter struct {
 	mu          sync.Mutex
 	file        *os.File
@@ -30,7 +55,9 @@ type AOFWriter struct {
 	done        chan struct{}
 }
 
-// NewAOFWriter creates a new AOF writer
+// NewAOFWriter creates a new AOF writer for the given file with the specified
+// fsync policy. If policy is FsyncEverySec, a background goroutine is started
+// to flush the file once per second.
 func NewAOFWriter(filename string, policy FsyncPolicy) (*AOFWriter, error) {
 	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -68,7 +95,10 @@ func (w *AOFWriter) backgroundFsync() {
 	}
 }
 
-// LogOperation writes an operation to the AOF in RESP format
+// LogOperation appends a RESP-encoded command to the AOF. The behavior depends
+// on the configured fsync policy: FsyncAlways performs an immediate fsync,
+// FsyncEverySec relies on the background goroutine, and FsyncNo leaves flushing
+// to the OS. LogOperation is safe for concurrent use.
 func (w *AOFWriter) LogOperation(cmd []string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -89,7 +119,8 @@ func (w *AOFWriter) LogOperation(cmd []string) error {
 	return nil
 }
 
-// Close closes the AOF writer and stops the background fsync goroutine
+// Close flushes any buffered data, stops the background fsync goroutine,
+// and closes the underlying file.
 func (w *AOFWriter) Close() error {
 	if w.done != nil {
 		close(w.done)
@@ -105,17 +136,20 @@ func (w *AOFWriter) Close() error {
 	return w.file.Close()
 }
 
-// Filename returns the AOF filename
+// Filename returns the path to the AOF file.
 func (w *AOFWriter) Filename() string {
 	return w.filename
 }
 
-// FsyncPolicy returns the fsync policy
+// FsyncPolicy returns the current durability policy of the writer.
 func (w *AOFWriter) FsyncPolicy() FsyncPolicy {
 	return w.fsyncPolicy
 }
 
-// LoadAOF replays operations from the AOF file
+// LoadAOF replays operations from the AOF file to reconstruct the store state.
+// It parses RESP arrays from the file and invokes the corresponding store
+// methods (SET, DEL, HSET, LPUSH, etc.). If the file does not exist, LoadAOF
+// returns nil without error.
 func (s *Store) LoadAOF(filename string) error {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -127,6 +161,7 @@ func (s *Store) LoadAOF(filename string) error {
 	defer file.Close()
 
 	reader := bufio.NewReader(file)
+	count := 0
 	for {
 		value, err := resp.Parse(reader)
 		if err == io.EOF {
@@ -148,6 +183,8 @@ func (s *Store) LoadAOF(filename string) error {
 		if len(args) == 0 {
 			continue
 		}
+
+		count++
 
 		switch args[0] {
 		case "SET":
@@ -199,20 +236,23 @@ func (s *Store) LoadAOF(filename string) error {
 		}
 	}
 
+	slog.Info("aof file loaded", "commands", count, "path", filename, "component", "aof")
 	return nil
 }
 
-// EnableAOF enables AOF persistence for the store
+// EnableAOF creates a new AOFWriter and attaches it to the store.
+// Subsequent mutating operations will be logged to the AOF.
 func (s *Store) EnableAOF(filename string, policy FsyncPolicy) error {
 	writer, err := NewAOFWriter(filename, policy)
 	if err != nil {
 		return err
 	}
 	s.aof = writer
+	slog.Info("aof persistence enabled", "path", filename, "fsync_policy", policy.String(), "component", "aof")
 	return nil
 }
 
-// DisableAOF disables AOF persistence
+// DisableAOF closes the current AOF writer and detaches it from the store.
 func (s *Store) DisableAOF() error {
 	if s.aof != nil {
 		if err := s.aof.Close(); err != nil {

@@ -4,20 +4,23 @@ import (
 	"sync"
 )
 
-// Hash represents a Redis hash data structure
+// Hash represents a Redis-like hash data structure where each key maps to a
+// set of field-value pairs. It is safe for concurrent use.
 type Hash struct {
 	mu     sync.RWMutex `json:"-"`
 	Fields map[string]string
 }
 
-// NewHash creates a new Hash instance
+// NewHash creates and returns a new, empty Hash.
 func NewHash() *Hash {
 	return &Hash{
 		Fields: make(map[string]string),
 	}
 }
 
-// HSet sets field in the hash stored at key to value
+// HSet sets a field in the hash stored at key to value. If the key does not
+// exist, a new hash is created. It returns true if the field was newly created.
+// It is safe for concurrent use by multiple goroutines.
 func (s *Store) HSet(key, field, value string) (bool, error) {
 	shard := s.getShard(key)
 	shard.mu.Lock()
@@ -56,7 +59,9 @@ func (s *Store) HSet(key, field, value string) (bool, error) {
 	return !exists, nil
 }
 
-// HGet returns the value associated with field in the hash stored at key
+// HGet returns the value associated with field in the hash stored at key.
+// It returns ErrKeyNotFound if the key or field does not exist.
+// It is safe for concurrent use by multiple goroutines.
 func (s *Store) HGet(key, field string) (string, error) {
 	shard := s.getShard(key)
 	shard.mu.RLock()
@@ -83,7 +88,9 @@ func (s *Store) HGet(key, field string) (string, error) {
 	return value, nil
 }
 
-// HDel removes one or more fields from the hash stored at key
+// HDel removes one or more fields from the hash stored at key and returns
+// the number of fields removed. It is safe for concurrent use by multiple
+// goroutines.
 func (s *Store) HDel(key string, fields ...string) (int, error) {
 	shard := s.getShard(key)
 	shard.mu.Lock()
@@ -116,7 +123,8 @@ func (s *Store) HDel(key string, fields ...string) (int, error) {
 	return count, nil
 }
 
-// HGetAll returns all fields and values of the hash stored at key
+// HGetAll returns a copy of all fields and values in the hash stored at key.
+// It is safe for concurrent use by multiple goroutines.
 func (s *Store) HGetAll(key string) (map[string]string, error) {
 	shard := s.getShard(key)
 	shard.mu.RLock()
@@ -143,7 +151,8 @@ func (s *Store) HGetAll(key string) (map[string]string, error) {
 	return result, nil
 }
 
-// HLen returns the number of fields in the hash stored at key
+// HLen returns the number of fields in the hash stored at key.
+// It is safe for concurrent use by multiple goroutines.
 func (s *Store) HLen(key string) (int, error) {
 	shard := s.getShard(key)
 	shard.mu.RLock()
@@ -165,7 +174,8 @@ func (s *Store) HLen(key string) (int, error) {
 	return len(hash.Fields), nil
 }
 
-// GetFields returns a copy of the hash fields
+// GetFields returns a shallow copy of the hash fields under a read lock.
+// It is safe for concurrent use by multiple goroutines.
 func (h *Hash) GetFields() map[string]string {
 	h.mu.RLock()
 	defer h.mu.RUnlock()

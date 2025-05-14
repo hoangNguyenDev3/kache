@@ -6,34 +6,35 @@ import (
 	"sync"
 )
 
-// List represents a Redis-like list
+// List represents a Redis-like list of strings. It is safe for concurrent use.
 type List struct {
 	mu       sync.RWMutex `json:"-" gob:"-"`
 	elements []string
 }
 
-// GobEncode implements gob.GobEncoder interface
+// GobEncode implements gob.GobEncoder, serializing the list elements as JSON.
 func (l *List) GobEncode() ([]byte, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	return json.Marshal(l.elements)
 }
 
-// GobDecode implements gob.GobDecoder interface
+// GobDecode implements gob.GobDecoder, deserializing the list elements from JSON.
 func (l *List) GobDecode(data []byte) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return json.Unmarshal(data, &l.elements)
 }
 
-// NewList creates a new List instance
+// NewList creates and returns a new, empty List.
 func NewList() *List {
 	return &List{
 		elements: make([]string, 0),
 	}
 }
 
-// GetElements returns a copy of the list elements
+// GetElements returns a copy of the list elements under a read lock.
+// It is safe for concurrent use by multiple goroutines.
 func (l *List) GetElements() []string {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -62,7 +63,9 @@ func clamp(index, length int) int {
 	return index
 }
 
-// LPush prepends values to the list stored at key
+// LPush prepends one or more values to the list stored at key. If the key
+// does not exist, a new list is created. It returns the length of the list
+// after the push. It is safe for concurrent use by multiple goroutines.
 func (s *Store) LPush(key string, values ...string) (int, error) {
 	shard := s.getShard(key)
 	shard.mu.Lock()
@@ -108,7 +111,9 @@ func (s *Store) LPush(key string, values ...string) (int, error) {
 	return len(list.elements), nil
 }
 
-// RPush appends values to the list stored at key
+// RPush appends one or more values to the list stored at key. If the key
+// does not exist, a new list is created. It returns the length of the list
+// after the push. It is safe for concurrent use by multiple goroutines.
 func (s *Store) RPush(key string, values ...string) (int, error) {
 	shard := s.getShard(key)
 	shard.mu.Lock()
@@ -148,7 +153,10 @@ func (s *Store) RPush(key string, values ...string) (int, error) {
 	return len(list.elements), nil
 }
 
-// LPop removes and returns the first element of the list stored at key
+// LPop removes and returns the first element of the list stored at key.
+// If the list becomes empty, the key is deleted. It returns ErrKeyNotFound
+// if the key does not exist or the list is empty.
+// It is safe for concurrent use by multiple goroutines.
 func (s *Store) LPop(key string) (string, error) {
 	shard := s.getShard(key)
 	shard.mu.Lock()
@@ -186,7 +194,10 @@ func (s *Store) LPop(key string) (string, error) {
 	return value, nil
 }
 
-// RPop removes and returns the last element of the list stored at key
+// RPop removes and returns the last element of the list stored at key.
+// If the list becomes empty, the key is deleted. It returns ErrKeyNotFound
+// if the key does not exist or the list is empty.
+// It is safe for concurrent use by multiple goroutines.
 func (s *Store) RPop(key string) (string, error) {
 	shard := s.getShard(key)
 	shard.mu.Lock()
@@ -224,7 +235,8 @@ func (s *Store) RPop(key string) (string, error) {
 	return value, nil
 }
 
-// LLen returns the length of the list stored at key
+// LLen returns the length of the list stored at key.
+// It is safe for concurrent use by multiple goroutines.
 func (s *Store) LLen(key string) (int, error) {
 	shard := s.getShard(key)
 	shard.mu.RLock()
@@ -246,7 +258,9 @@ func (s *Store) LLen(key string) (int, error) {
 	return len(list.elements), nil
 }
 
-// LRange returns the specified elements of the list stored at key
+// LRange returns the elements in the inclusive range [start, stop] from the
+// list stored at key. Negative indices count from the end of the list.
+// It is safe for concurrent use by multiple goroutines.
 func (s *Store) LRange(key string, start, stop int) ([]string, error) {
 	shard := s.getShard(key)
 	shard.mu.RLock()
@@ -285,7 +299,10 @@ func (s *Store) LRange(key string, start, stop int) ([]string, error) {
 	return result, nil
 }
 
-// LIndex returns the element at index in the list stored at key
+// LIndex returns the element at the given index in the list stored at key.
+// Negative indices count from the end of the list. It returns ErrKeyNotFound
+// if the key does not exist or the index is out of range.
+// It is safe for concurrent use by multiple goroutines.
 func (s *Store) LIndex(key string, index int) (string, error) {
 	shard := s.getShard(key)
 	shard.mu.RLock()
@@ -317,7 +334,10 @@ func (s *Store) LIndex(key string, index int) (string, error) {
 	return list.elements[index], nil
 }
 
-// LTrim trims an existing list so that it will contain only the specified range of elements
+// LTrim trims the list stored at key so that it contains only the elements
+// in the inclusive range [start, stop]. If the range is empty, the key is
+// deleted. Negative indices count from the end of the list.
+// It is safe for concurrent use by multiple goroutines.
 func (s *Store) LTrim(key string, start, stop int) error {
 	shard := s.getShard(key)
 	shard.mu.Lock()
