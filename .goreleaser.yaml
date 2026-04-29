@@ -46,7 +46,9 @@ dockers:
   - image_templates:
       - "ghcr.io/hoangnguyendev3/kache:{{ .Version }}"
       - "ghcr.io/hoangnguyendev3/kache:latest"
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.goreleaser
+    ids:
+      - kache
     build_flag_templates:
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"

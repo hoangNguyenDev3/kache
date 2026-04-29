@@ -1,0 +1,14 @@
+FROM alpine:latest
+
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /app
+
+COPY kache /app/kache
+
+EXPOSE 6379 8080
+
+VOLUME ["/data"]
+
+ENTRYPOINT ["/app/kache"]
+CMD ["server"]
