@@ -12,8 +12,9 @@ let healthInterval = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     setupTabs();
+    setupAccordion();
     checkHealth();
-    healthInterval = setInterval(checkHealth, 5000);
+    healthInterval = setInterval(checkHealth, 10000);
 });
 
 function setupTabs() {
@@ -30,6 +31,24 @@ function setupTabs() {
     });
 }
 
+function setupAccordion() {
+    const headers = document.querySelectorAll('.accordion-header');
+    headers.forEach(header => {
+        header.addEventListener('click', () => {
+            const item = header.closest('.accordion-item');
+            const isOpen = item.classList.contains('open');
+
+            // Close all items (accordion mode — only one open at a time)
+            document.querySelectorAll('.accordion-item').forEach(i => i.classList.remove('open'));
+
+            // Toggle the clicked item
+            if (!isOpen) {
+                item.classList.add('open');
+            }
+        });
+    });
+}
+
 /* =============================================
    Health & Connection
    ============================================= */
@@ -39,20 +58,13 @@ async function checkHealth() {
         const res = await fetch(`${API_BASE_URL}/health`, { method: 'GET' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        updateDashboard(data);
+        document.getElementById('statusVersion').textContent = data.version ?? '--';
+        document.getElementById('statusUptime').textContent = formatDuration(data.uptime_seconds ?? 0);
         setConnectionStatus(true);
     } catch (err) {
         setConnectionStatus(false);
         console.warn('Health check failed:', err.message);
     }
-}
-
-function updateDashboard(data) {
-    document.getElementById('metricVersion').textContent = data.version ?? '--';
-    document.getElementById('metricUptime').textContent = formatDuration(data.uptime_seconds ?? 0);
-    document.getElementById('metricGoroutines').textContent = data.goroutines ?? '--';
-    document.getElementById('metricGoVersion').textContent = data.go_version ?? '--';
-    document.getElementById('lastRefresh').textContent = new Date().toLocaleTimeString();
 }
 
 function setConnectionStatus(online) {
