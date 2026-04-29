@@ -2,7 +2,7 @@
    Kache Live Demo — JavaScript
    ============================================= */
 
-const API_BASE_URL = window.API_BASE_URL || 'https://kache-demo.onrender.com';
+const API_BASE_URL = window.API_BASE_URL || 'https://kache.onrender.com';
 
 let healthInterval = null;
 

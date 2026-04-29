@@ -6,7 +6,7 @@ A multi-core, Redis-compatible in-memory data store built in Go — optimized wh
 
 ## Live Demo
 
-Try Kache without installing anything: [**Launch Demo**](https://kache-demo.vercel.app)
+Try Kache without installing anything: [**Launch Demo**](https://kache.vercel.app)
 
 > Interactive web console to SET/GET keys, manage lists and hashes, and monitor server health in real time.
 
