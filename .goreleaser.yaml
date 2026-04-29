@@ -44,16 +44,41 @@ changelog:
 
 dockers:
   - image_templates:
-      - "ghcr.io/hoangnguyendev3/kache:{{ .Version }}"
-      - "ghcr.io/hoangnguyendev3/kache:latest"
+      - "ghcr.io/hoangnguyendev3/kache:{{ .Version }}-amd64"
+    use: buildx
     dockerfile: Dockerfile.goreleaser
     ids:
       - kache
+    goarch: amd64
     build_flag_templates:
+      - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.created={{ .Date }}"
       - "--label=org.opencontainers.image.title={{ .ProjectName }}"
       - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
       - "--label=org.opencontainers.image.version={{ .Version }}"
+  - image_templates:
+      - "ghcr.io/hoangnguyendev3/kache:{{ .Version }}-arm64"
+    use: buildx
+    dockerfile: Dockerfile.goreleaser
+    ids:
+      - kache
+    goarch: arm64
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{ .Date }}"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+
+docker_manifests:
+  - name_template: "ghcr.io/hoangnguyendev3/kache:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/hoangnguyendev3/kache:{{ .Version }}-amd64"
+      - "ghcr.io/hoangnguyendev3/kache:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/hoangnguyendev3/kache:latest"
+    image_templates:
+      - "ghcr.io/hoangnguyendev3/kache:{{ .Version }}-amd64"
+      - "ghcr.io/hoangnguyendev3/kache:{{ .Version }}-arm64"
 
 release:
   github:
