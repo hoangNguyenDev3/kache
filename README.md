@@ -1,3 +1,5 @@
+[![CI](https://github.com/hoangNguyenDev3/kache/actions/workflows/ci.yml/badge.svg)](https://github.com/hoangNguyenDev3/kache/actions/workflows/ci.yml) [![Go Version](https://img.shields.io/github/go-mod/go-version/hoangNguyenDev3/kache)](https://github.com/hoangNguyenDev3/kache) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Go Report Card](https://goreportcard.com/badge/github.com/hoangNguyenDev3/kache)](https://goreportcard.com/report/github.com/hoangNguyenDev3/kache)
+
 # Kache
 
 A multi-core, Redis-compatible in-memory data store built in Go — optimized where Redis isn't.
@@ -111,6 +113,23 @@ docker run -p 6379:6379 -p 8080:8080 kache
 | `--aof-path` | appendonly.aof | Path to AOF file |
 | `--aof-fsync` | everysec | AOF fsync policy (always/everysec/no) |
 | `--log-level` | info | Logging level (debug, info, warn, error) |
+| `--tls-enabled` | false | Enable TLS for TCP and HTTP servers |
+| `--tls-cert` | — | Path to TLS certificate file |
+| `--tls-key` | — | Path to TLS private key file |
+
+## Security
+
+- **TLS/SSL**: Both TCP and HTTP servers support TLS encryption via `--tls-enabled`, `--tls-cert`, and `--tls-key` flags
+- **HTTP Authentication**: Token-based auth for the REST API via `--auth-token`
+- **Input Validation**: Configurable limits on array length (1M) and bulk string size (512MB)
+- **Connection Timeout**: 30-second idle timeout for TCP connections
+
+## Observability
+
+- **Prometheus Metrics**: `/metrics` endpoint for scraping
+- **Health Check**: `/health` endpoint returning uptime, version, and goroutine count
+- **Profiling**: Full `/debug/pprof/` endpoints for CPU, memory, goroutine, and mutex profiling
+- **Structured Logging**: JSON/text structured logs via Go's `slog` with configurable log levels
 
 ## Running Tests
 
@@ -118,6 +137,17 @@ docker run -p 6379:6379 -p 8080:8080 kache
 go test ./... -v
 go test -bench=. -benchtime=3s ./tests/
 ```
+
+## Limitations
+
+- Single-node only — no clustering or replication (yet)
+- No Lua scripting (EVAL/EVALSHA)
+- No ACL/permission model — authentication is token-based only
+- No SET or SORTED SET data types (planned)
+
+## Contributing
+
+Contributions are welcome! Please read our [Contributing Guidelines](CONTRIBUTING.md) before submitting a pull request.
 
 ## Future Work
 
