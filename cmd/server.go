@@ -45,7 +45,7 @@ Example: redis-clone server --resp-port 6379 --http-port 8080`,
 	serverCmd.Flags().String("aof-fsync", "everysec", "AOF fsync policy (always, everysec, no)")
 
 	// Bind flags to viper
-	viper.BindPFlags(serverCmd.Flags())
+	_ = viper.BindPFlags(serverCmd.Flags()) // viper bind errors are programming errors
 
 	rootCmd.AddCommand(serverCmd)
 }
@@ -162,7 +162,9 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// Graceful shutdown
 	slog.Info("shutting down")
-	tcpServer.Stop()
+	if err := tcpServer.Stop(); err != nil {
+		slog.Warn("tcp server stop error", "error", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

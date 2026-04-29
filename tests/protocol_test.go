@@ -115,9 +115,9 @@ func TestArray(t *testing.T) {
 
 func TestInvalidInput(t *testing.T) {
 	tests := []struct {
+		want  error
 		name  string
 		input string
-		want  error
 	}{
 		{
 			name:  "invalid type",

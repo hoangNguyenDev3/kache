@@ -9,17 +9,17 @@ import (
 
 // Message represents a message published to a channel.
 type Message struct {
-	Channel string
 	Data    interface{}
+	Channel string
 }
 
 // Subscriber represents a client subscribed to one or more channels.
 // Messages are delivered on the Messages channel. The Done channel is closed
 // when the subscriber is fully unsubscribed from all channels.
 type Subscriber struct {
-	ID        string
 	Messages  chan Message
 	Done      chan struct{}
+	ID        string
 	closeOnce sync.Once
 }
 
@@ -32,8 +32,8 @@ func (s *Subscriber) closeDone() {
 // PubSub manages channel-based subscriptions. It maps channel names to
 // subscribers and is safe for concurrent use.
 type PubSub struct {
+	subscribers map[string]map[string]*Subscriber
 	mu          sync.RWMutex
-	subscribers map[string]map[string]*Subscriber // channel -> subscriberID -> subscriber
 }
 
 // New creates and returns a new PubSub manager.
@@ -139,14 +139,14 @@ func (ps *PubSub) Publish(channel string, data interface{}) int {
 
 // Pattern associates a glob-style pattern with a Subscriber.
 type Pattern struct {
-	Pattern    string
 	Subscriber *Subscriber
+	Pattern    string
 }
 
 // PatternPubSub extends PubSub with pattern-based subscriptions.
 type PatternPubSub struct {
+	patterns map[string]map[string]*Pattern
 	PubSub
-	patterns map[string]map[string]*Pattern // pattern -> subscriberID -> pattern
 }
 
 // NewPattern creates and returns a new PatternPubSub manager.

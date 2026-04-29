@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"fmt"
 	"hash/fnv"
+	"log/slog"
 	"os"
 	"strconv"
 	"sync"
@@ -104,6 +105,14 @@ func (s *Store) getShard(key string) *Shard {
 	return s.shards[hashValue%NumShards]
 }
 
+func (s *Store) logAOF(cmd []string) {
+	if s.aof != nil {
+		if err := s.aof.LogOperation(cmd); err != nil {
+			slog.Error("failed to log aof operation", "command", cmd, "error", err)
+		}
+	}
+}
+
 // Set stores a key with the given value and optional expiry time.
 // It is safe for concurrent use by multiple goroutines.
 func (s *Store) Set(key string, value interface{}, expiry *time.Time) error {
@@ -122,9 +131,9 @@ func (s *Store) Set(key string, value interface{}, expiry *time.Time) error {
 			if seconds < 1 {
 				seconds = 1
 			}
-			s.aof.LogOperation([]string{"SET", key, fmt.Sprintf("%v", value), "EX", strconv.Itoa(seconds)})
+			s.logAOF([]string{"SET", key, fmt.Sprintf("%v", value), "EX", strconv.Itoa(seconds)})
 		} else {
-			s.aof.LogOperation([]string{"SET", key, fmt.Sprintf("%v", value)})
+			s.logAOF([]string{"SET", key, fmt.Sprintf("%v", value)})
 		}
 	}
 
@@ -171,9 +180,7 @@ func (s *Store) Incr(key string) (int64, error) {
 			ExpiresAt: nil,
 		}
 
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"INCR", key})
-		}
+		s.logAOF([]string{"INCR", key})
 
 		return 1, nil
 	}
@@ -186,9 +193,7 @@ func (s *Store) Incr(key string) (int64, error) {
 			ExpiresAt: nil,
 		}
 
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"INCR", key})
-		}
+		s.logAOF([]string{"INCR", key})
 
 		return 1, nil
 	}
@@ -199,18 +204,14 @@ func (s *Store) Incr(key string) (int64, error) {
 		newVal := v + 1
 		entry.Value = newVal
 
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"INCR", key})
-		}
+		s.logAOF([]string{"INCR", key})
 
 		return newVal, nil
 	case int:
 		newVal := int64(v) + 1
 		entry.Value = newVal
 
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"INCR", key})
-		}
+		s.logAOF([]string{"INCR", key})
 
 		return newVal, nil
 	case string:
@@ -222,9 +223,7 @@ func (s *Store) Incr(key string) (int64, error) {
 		newVal := intVal + 1
 		entry.Value = newVal
 
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"INCR", key})
-		}
+		s.logAOF([]string{"INCR", key})
 
 		return newVal, nil
 	default:
@@ -244,9 +243,7 @@ func (s *Store) Del(keys ...string) (int, error) {
 			delete(shard.data, key)
 			count++
 
-			if s.aof != nil {
-				s.aof.LogOperation([]string{"DEL", key})
-			}
+			s.logAOF([]string{"DEL", key})
 		}
 		shard.mu.Unlock()
 	}
@@ -397,7 +394,9 @@ func (s *Store) activeExpiry() {
 func (s *Store) Stop() {
 	close(s.done)
 	if s.aof != nil {
-		s.aof.Close()
+		if err := s.aof.Close(); err != nil {
+			slog.Error("failed to close aof", "error", err)
+		}
 	}
 }
 
@@ -410,7 +409,9 @@ func (s *Store) SaveRDBBackground() {
 		}
 		defer s.rdbMu.Unlock()
 		if s.config != nil && s.config.RDBPath != "" {
-			s.SaveRDB(s.config.RDBPath)
+			if err := s.SaveRDB(s.config.RDBPath); err != nil {
+				slog.Error("background rdb save failed", "error", err)
+			}
 		}
 	}()
 }
@@ -432,6 +433,7 @@ func (s *Store) RewriteAOF() error {
 
 	bw := bufio.NewWriter(f)
 
+	var writeErr error
 	for _, shard := range s.shards {
 		shard.mu.RLock()
 		for key, entry := range shard.data {
@@ -448,7 +450,9 @@ func (s *Store) RewriteAOF() error {
 					}
 					cmd = append(cmd, "EX", strconv.Itoa(seconds))
 				}
-				bw.Write(resp.FormatCommand(cmd))
+				if _, err = bw.Write(resp.FormatCommand(cmd)); err != nil {
+					writeErr = err
+				}
 			case int64:
 				cmd := []string{"SET", key, strconv.FormatInt(v, 10)}
 				if entry.ExpiresAt != nil {
@@ -458,42 +462,59 @@ func (s *Store) RewriteAOF() error {
 					}
 					cmd = append(cmd, "EX", strconv.Itoa(seconds))
 				}
-				bw.Write(resp.FormatCommand(cmd))
+				if _, err = bw.Write(resp.FormatCommand(cmd)); err != nil {
+					writeErr = err
+				}
 			case *Hash:
 				fields := v.GetFields()
 				for field, val := range fields {
 					cmd := []string{"HSET", key, field, val}
-					bw.Write(resp.FormatCommand(cmd))
+					if _, err = bw.Write(resp.FormatCommand(cmd)); err != nil {
+						writeErr = err
+						break
+					}
 				}
 			case *List:
 				elements := v.GetElements()
 				if len(elements) > 0 {
 					cmd := append([]string{"RPUSH", key}, elements...)
-					bw.Write(resp.FormatCommand(cmd))
+					if _, err = bw.Write(resp.FormatCommand(cmd)); err != nil {
+						writeErr = err
+					}
 				}
+			}
+			if writeErr != nil {
+				break
 			}
 		}
 		shard.mu.RUnlock()
+		if writeErr != nil {
+			break
+		}
+	}
+	if writeErr != nil {
+		f.Close()
+		return fmt.Errorf("failed to write AOF entry: %w", writeErr)
 	}
 
-	if err := bw.Flush(); err != nil {
+	if err = bw.Flush(); err != nil {
 		f.Close()
 		return fmt.Errorf("failed to flush temp AOF file: %w", err)
 	}
-	if err := f.Sync(); err != nil {
+	if err = f.Sync(); err != nil {
 		f.Close()
 		return fmt.Errorf("failed to sync temp AOF file: %w", err)
 	}
-	if err := f.Close(); err != nil {
+	if err = f.Close(); err != nil {
 		return fmt.Errorf("failed to close temp AOF file: %w", err)
 	}
 
 	// Close current AOF, rename, reopen
-	if err := s.aof.Close(); err != nil {
+	if err = s.aof.Close(); err != nil {
 		return fmt.Errorf("failed to close current AOF: %w", err)
 	}
 
-	if err := os.Rename(tmpFile, s.aof.Filename()); err != nil {
+	if err = os.Rename(tmpFile, s.aof.Filename()); err != nil {
 		return fmt.Errorf("failed to rename temp AOF file: %w", err)
 	}
 
@@ -513,7 +534,9 @@ func (s *Store) RewriteAOFBackground() {
 			return
 		}
 		defer s.aofMu.Unlock()
-		s.RewriteAOF()
+		if err := s.RewriteAOF(); err != nil {
+			slog.Error("background aof rewrite failed", "error", err)
+		}
 	}()
 }
 

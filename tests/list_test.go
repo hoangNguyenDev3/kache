@@ -226,7 +226,7 @@ func TestHTTPListOperations(t *testing.T) {
 
 	t.Run("LPUSH", func(t *testing.T) {
 		payload := map[string][]string{
-			"values": []string{"x", "y"},
+			"values": {"x", "y"},
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest(http.MethodPost, "/v1/list/test-list/lpush", bytes.NewBuffer(body))
@@ -245,7 +245,7 @@ func TestHTTPListOperations(t *testing.T) {
 
 	t.Run("RPUSH", func(t *testing.T) {
 		payload := map[string][]string{
-			"values": []string{"z"},
+			"values": {"z"},
 		}
 		body, _ := json.Marshal(payload)
 		req := httptest.NewRequest(http.MethodPost, "/v1/list/test-list/rpush", bytes.NewBuffer(body))

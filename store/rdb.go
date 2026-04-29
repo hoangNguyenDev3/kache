@@ -29,8 +29,8 @@ const rdbVersion = 1
 
 // rdbEntry is an internal helper used during RDB serialization.
 type rdbEntry struct {
-	key   string
 	entry *Entry
+	key   string
 }
 
 // SaveRDB writes the current store state to an RDB file using a custom binary
@@ -112,10 +112,14 @@ func writeEntry(file *os.File, key string, entry *Entry) error {
 		typeByte = 3
 		elems := v.GetElements()
 		buf := new(bytes.Buffer)
-		binary.Write(buf, binary.BigEndian, uint32(len(elems)))
+		if err := binary.Write(buf, binary.BigEndian, uint32(len(elems))); err != nil {
+			return err
+		}
 		for _, e := range elems {
 			eBytes := []byte(e)
-			binary.Write(buf, binary.BigEndian, uint32(len(eBytes)))
+			if err := binary.Write(buf, binary.BigEndian, uint32(len(eBytes))); err != nil {
+				return err
+			}
 			buf.Write(eBytes)
 		}
 		valueBytes = buf.Bytes()

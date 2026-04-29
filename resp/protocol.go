@@ -38,11 +38,11 @@ var (
 // Value represents a parsed RESP value. The Type field indicates which
 // union member is valid.
 type Value struct {
-	Type  byte
-	Str   string
-	Int   int64
-	Array []Value
 	Err   error
+	Str   string
+	Array []Value
+	Int   int64
+	Type  byte
 }
 
 // NewSimpleString returns a RESP simple string value.
@@ -254,7 +254,7 @@ func Write(w io.Writer, value *Value) error {
 
 // WriteError writes a RESP error value with the given message to w.
 func WriteError(w io.Writer, message string) error {
-	_, err := w.Write(NewError(fmt.Errorf(message)).Marshal())
+	_, err := w.Write(NewError(fmt.Errorf("%s", message)).Marshal())
 	return err
 }
 

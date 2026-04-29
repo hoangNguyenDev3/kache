@@ -12,9 +12,7 @@ func (s *Store) SetUnlocked(key string, value interface{}, expiry *time.Time) er
 		Value:     value,
 		ExpiresAt: expiry,
 	}
-	if s.aof != nil {
-		s.aof.LogOperation([]string{"SET", key, fmt.Sprintf("%v", value)})
-	}
+	s.logAOF([]string{"SET", key, fmt.Sprintf("%v", value)})
 	return nil
 }
 
@@ -38,9 +36,7 @@ func (s *Store) IncrUnlocked(key string) (int64, error) {
 			Value:     int64(1),
 			ExpiresAt: nil,
 		}
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"INCR", key})
-		}
+		s.logAOF([]string{"INCR", key})
 		return 1, nil
 	}
 	if entry.ExpiresAt != nil && time.Now().After(*entry.ExpiresAt) {
@@ -49,25 +45,19 @@ func (s *Store) IncrUnlocked(key string) (int64, error) {
 			Value:     int64(1),
 			ExpiresAt: nil,
 		}
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"INCR", key})
-		}
+		s.logAOF([]string{"INCR", key})
 		return 1, nil
 	}
 	switch v := entry.Value.(type) {
 	case int64:
 		newVal := v + 1
 		entry.Value = newVal
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"INCR", key})
-		}
+		s.logAOF([]string{"INCR", key})
 		return newVal, nil
 	case int:
 		newVal := int64(v) + 1
 		entry.Value = newVal
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"INCR", key})
-		}
+		s.logAOF([]string{"INCR", key})
 		return newVal, nil
 	case string:
 		var intVal int64
@@ -76,9 +66,7 @@ func (s *Store) IncrUnlocked(key string) (int64, error) {
 		}
 		newVal := intVal + 1
 		entry.Value = newVal
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"INCR", key})
-		}
+		s.logAOF([]string{"INCR", key})
 		return newVal, nil
 	default:
 		return 0, ErrWrongType
@@ -92,9 +80,7 @@ func (s *Store) DelUnlocked(keys ...string) (int, error) {
 		if _, ok := shard.data[key]; ok {
 			delete(shard.data, key)
 			count++
-			if s.aof != nil {
-				s.aof.LogOperation([]string{"DEL", key})
-			}
+			s.logAOF([]string{"DEL", key})
 		}
 	}
 	return count, nil
@@ -151,9 +137,7 @@ func (s *Store) HSetUnlocked(key, field, value string) (bool, error) {
 		shard.data[key] = &Entry{
 			Value: hash,
 		}
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"HSET", key, field, value})
-		}
+		s.logAOF([]string{"HSET", key, field, value})
 		return true, nil
 	}
 	hash, ok := entry.Value.(*Hash)
@@ -162,9 +146,7 @@ func (s *Store) HSetUnlocked(key, field, value string) (bool, error) {
 	}
 	_, exists := hash.Fields[field]
 	hash.Fields[field] = value
-	if s.aof != nil {
-		s.aof.LogOperation([]string{"HSET", key, field, value})
-	}
+	s.logAOF([]string{"HSET", key, field, value})
 	return !exists, nil
 }
 
@@ -199,9 +181,7 @@ func (s *Store) HDelUnlocked(key string, fields ...string) (int, error) {
 	for _, field := range fields {
 		if _, ok := hash.Fields[field]; ok {
 			delete(hash.Fields, field)
-			if s.aof != nil {
-				s.aof.LogOperation([]string{"HDEL", key, field})
-			}
+			s.logAOF([]string{"HDEL", key, field})
 			count++
 		}
 	}
@@ -251,10 +231,7 @@ func (s *Store) LPushUnlocked(key string, values ...string) (int, error) {
 		shard.data[key] = &Entry{
 			Value: list,
 		}
-		if s.aof != nil {
-			cmd := append([]string{"LPUSH", key}, values...)
-			s.aof.LogOperation(cmd)
-		}
+		s.logAOF(append([]string{"LPUSH", key}, values...))
 		return len(list.elements), nil
 	}
 	list, ok := entry.Value.(*List)
@@ -264,10 +241,7 @@ func (s *Store) LPushUnlocked(key string, values ...string) (int, error) {
 	for _, v := range values {
 		list.elements = append([]string{v}, list.elements...)
 	}
-	if s.aof != nil {
-		cmd := append([]string{"LPUSH", key}, values...)
-		s.aof.LogOperation(cmd)
-	}
+	s.logAOF(append([]string{"LPUSH", key}, values...))
 	return len(list.elements), nil
 }
 
@@ -280,10 +254,7 @@ func (s *Store) RPushUnlocked(key string, values ...string) (int, error) {
 		shard.data[key] = &Entry{
 			Value: list,
 		}
-		if s.aof != nil {
-			cmd := append([]string{"RPUSH", key}, values...)
-			s.aof.LogOperation(cmd)
-		}
+		s.logAOF(append([]string{"RPUSH", key}, values...))
 		return len(list.elements), nil
 	}
 	list, ok := entry.Value.(*List)
@@ -291,10 +262,7 @@ func (s *Store) RPushUnlocked(key string, values ...string) (int, error) {
 		return 0, ErrWrongType
 	}
 	list.elements = append(list.elements, values...)
-	if s.aof != nil {
-		cmd := append([]string{"RPUSH", key}, values...)
-		s.aof.LogOperation(cmd)
-	}
+	s.logAOF(append([]string{"RPUSH", key}, values...))
 	return len(list.elements), nil
 }
 
@@ -317,9 +285,7 @@ func (s *Store) LPopUnlocked(key string) (string, error) {
 	if len(list.elements) == 0 {
 		delete(shard.data, key)
 	}
-	if s.aof != nil {
-		s.aof.LogOperation([]string{"LPOP", key})
-	}
+	s.logAOF([]string{"LPOP", key})
 	return value, nil
 }
 
@@ -342,9 +308,7 @@ func (s *Store) RPopUnlocked(key string) (string, error) {
 	if len(list.elements) == 0 {
 		delete(shard.data, key)
 	}
-	if s.aof != nil {
-		s.aof.LogOperation([]string{"RPOP", key})
-	}
+	s.logAOF([]string{"RPOP", key})
 	return value, nil
 }
 
@@ -429,14 +393,10 @@ func (s *Store) LTrimUnlocked(key string, start, stop int) error {
 	stop = clamp(stop, length)
 	if start > stop {
 		delete(shard.data, key)
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"LTRIM", key, strconv.Itoa(start), strconv.Itoa(stop)})
-		}
+		s.logAOF([]string{"LTRIM", key, strconv.Itoa(start), strconv.Itoa(stop)})
 		return nil
 	}
 	list.elements = list.elements[start : stop+1]
-	if s.aof != nil {
-		s.aof.LogOperation([]string{"LTRIM", key, strconv.Itoa(start), strconv.Itoa(stop)})
-	}
+	s.logAOF([]string{"LTRIM", key, strconv.Itoa(start), strconv.Itoa(stop)})
 	return nil
 }

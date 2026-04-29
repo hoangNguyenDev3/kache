@@ -8,8 +8,8 @@ import (
 
 // List represents a Redis-like list of strings. It is safe for concurrent use.
 type List struct {
-	mu       sync.RWMutex `json:"-" gob:"-"`
 	elements []string
+	mu       sync.RWMutex `json:"-" gob:"-"`
 }
 
 // GobEncode implements gob.GobEncoder, serializing the list elements as JSON.
@@ -82,10 +82,7 @@ func (s *Store) LPush(key string, values ...string) (int, error) {
 			Value: list,
 		}
 
-		if s.aof != nil {
-			cmd := append([]string{"LPUSH", key}, values...)
-			s.aof.LogOperation(cmd)
-		}
+		s.logAOF(append([]string{"LPUSH", key}, values...))
 
 		return len(list.elements), nil
 	}
@@ -103,10 +100,7 @@ func (s *Store) LPush(key string, values ...string) (int, error) {
 		list.elements = append([]string{v}, list.elements...)
 	}
 
-	if s.aof != nil {
-		cmd := append([]string{"LPUSH", key}, values...)
-		s.aof.LogOperation(cmd)
-	}
+	s.logAOF(append([]string{"LPUSH", key}, values...))
 
 	return len(list.elements), nil
 }
@@ -127,10 +121,7 @@ func (s *Store) RPush(key string, values ...string) (int, error) {
 			Value: list,
 		}
 
-		if s.aof != nil {
-			cmd := append([]string{"RPUSH", key}, values...)
-			s.aof.LogOperation(cmd)
-		}
+		s.logAOF(append([]string{"RPUSH", key}, values...))
 
 		return len(list.elements), nil
 	}
@@ -145,10 +136,7 @@ func (s *Store) RPush(key string, values ...string) (int, error) {
 
 	list.elements = append(list.elements, values...)
 
-	if s.aof != nil {
-		cmd := append([]string{"RPUSH", key}, values...)
-		s.aof.LogOperation(cmd)
-	}
+	s.logAOF(append([]string{"RPUSH", key}, values...))
 
 	return len(list.elements), nil
 }
@@ -187,9 +175,7 @@ func (s *Store) LPop(key string) (string, error) {
 		delete(shard.data, key)
 	}
 
-	if s.aof != nil {
-		s.aof.LogOperation([]string{"LPOP", key})
-	}
+	s.logAOF([]string{"LPOP", key})
 
 	return value, nil
 }
@@ -228,9 +214,7 @@ func (s *Store) RPop(key string) (string, error) {
 		delete(shard.data, key)
 	}
 
-	if s.aof != nil {
-		s.aof.LogOperation([]string{"RPOP", key})
-	}
+	s.logAOF([]string{"RPOP", key})
 
 	return value, nil
 }
@@ -371,18 +355,14 @@ func (s *Store) LTrim(key string, start, stop int) error {
 	if start > stop {
 		delete(shard.data, key)
 
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"LTRIM", key, strconv.Itoa(start), strconv.Itoa(stop)})
-		}
+		s.logAOF([]string{"LTRIM", key, strconv.Itoa(start), strconv.Itoa(stop)})
 
 		return nil
 	}
 
 	list.elements = list.elements[start : stop+1]
 
-	if s.aof != nil {
-		s.aof.LogOperation([]string{"LTRIM", key, strconv.Itoa(start), strconv.Itoa(stop)})
-	}
+	s.logAOF([]string{"LTRIM", key, strconv.Itoa(start), strconv.Itoa(stop)})
 
 	return nil
 }

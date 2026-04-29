@@ -22,11 +22,11 @@ import (
 
 // Client represents a connected TCP client and its session state.
 type Client struct {
+	lastSeen      time.Time
 	conn          net.Conn
 	server        *TCPServer
-	lastSeen      time.Time
-	inTransaction bool
 	txQueue       []resp.Value
+	inTransaction bool
 }
 
 // TCPServer accepts TCP connections and processes RESP protocol commands.
@@ -34,16 +34,16 @@ type Client struct {
 type TCPServer struct {
 	listener net.Listener
 	store    *store.Store
-	clients  sync.Map
 	config   *Config
 	done     chan struct{}
 	pubsub   *pubsub.PubSub
+	clients  sync.Map
 }
 
 // Config holds TCP server configuration.
 type Config struct {
-	ClientTimeout time.Duration
 	TLSConfig     *tls.Config
+	ClientTimeout time.Duration
 }
 
 // NewTCPServer creates and returns a new TCPServer backed by the given store.
@@ -162,7 +162,7 @@ func (s *TCPServer) handleConnection(conn net.Conn) {
 					return
 				}
 				// Send error response to client
-				if err := resp.WriteError(writer, fmt.Sprintf("ERR %v", err)); err != nil {
+				if err = resp.WriteError(writer, fmt.Sprintf("ERR %v", err)); err != nil {
 					writer.Flush()
 					return
 				}
@@ -323,9 +323,13 @@ func (s *TCPServer) handleSubscribe(conn net.Conn, reader *bufio.Reader, writer 
 	stopGoroutine := func() {
 		stopOnce.Do(func() {
 			close(stopChan)
-			conn.SetReadDeadline(time.Now())
+			if err := conn.SetReadDeadline(time.Now()); err != nil {
+				slog.Warn("failed to set read deadline", "error", err)
+			}
 			<-goroutineDone
-			conn.SetReadDeadline(time.Time{})
+			if err := conn.SetReadDeadline(time.Time{}); err != nil {
+				slog.Warn("failed to clear read deadline", "error", err)
+			}
 		})
 	}
 	defer stopGoroutine()

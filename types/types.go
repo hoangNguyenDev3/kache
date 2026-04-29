@@ -7,11 +7,11 @@ import (
 
 // Command represents a store operation with an optional expiration time.
 type Command struct {
+	Value     interface{} `json:"value,omitempty"`
+	ExpiresAt *time.Time  `json:"expires_at,omitempty"`
 	Operation string      `json:"op"`
 	Key       string      `json:"key"`
-	Value     interface{} `json:"value,omitempty"`
 	Field     string      `json:"field,omitempty"`
-	ExpiresAt *time.Time  `json:"expires_at,omitempty"`
 }
 
 // Store defines the methods that must be implemented by a Kache store backend.

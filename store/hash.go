@@ -7,8 +7,8 @@ import (
 // Hash represents a Redis-like hash data structure where each key maps to a
 // set of field-value pairs. It is safe for concurrent use.
 type Hash struct {
-	mu     sync.RWMutex `json:"-"`
 	Fields map[string]string
+	mu     sync.RWMutex `json:"-"`
 }
 
 // NewHash creates and returns a new, empty Hash.
@@ -34,9 +34,7 @@ func (s *Store) HSet(key, field, value string) (bool, error) {
 			Value: hash,
 		}
 
-		if s.aof != nil {
-			s.aof.LogOperation([]string{"HSET", key, field, value})
-		}
+		s.logAOF([]string{"HSET", key, field, value})
 
 		return true, nil
 	}
@@ -52,9 +50,7 @@ func (s *Store) HSet(key, field, value string) (bool, error) {
 	_, exists := hash.Fields[field]
 	hash.Fields[field] = value
 
-	if s.aof != nil {
-		s.aof.LogOperation([]string{"HSET", key, field, value})
-	}
+	s.logAOF([]string{"HSET", key, field, value})
 
 	return !exists, nil
 }
@@ -113,9 +109,7 @@ func (s *Store) HDel(key string, fields ...string) (int, error) {
 	for _, field := range fields {
 		if _, ok := hash.Fields[field]; ok {
 			delete(hash.Fields, field)
-			if s.aof != nil {
-				s.aof.LogOperation([]string{"HDEL", key, field})
-			}
+			s.logAOF([]string{"HDEL", key, field})
 			count++
 		}
 	}

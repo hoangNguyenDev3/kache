@@ -37,10 +37,10 @@ func init() {
 	rootCmd.PersistentFlags().String("tls-cert", "", "Path to TLS certificate file")
 	rootCmd.PersistentFlags().String("tls-key", "", "Path to TLS private key file")
 
-	viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level"))
-	viper.BindPFlag("tls.enabled", rootCmd.PersistentFlags().Lookup("tls-enabled"))
-	viper.BindPFlag("tls.cert", rootCmd.PersistentFlags().Lookup("tls-cert"))
-	viper.BindPFlag("tls.key", rootCmd.PersistentFlags().Lookup("tls-key"))
+	_ = viper.BindPFlag("log.level", rootCmd.PersistentFlags().Lookup("log-level"))     // viper bind errors are programming errors
+	_ = viper.BindPFlag("tls.enabled", rootCmd.PersistentFlags().Lookup("tls-enabled")) // viper bind errors are programming errors
+	_ = viper.BindPFlag("tls.cert", rootCmd.PersistentFlags().Lookup("tls-cert"))       // viper bind errors are programming errors
+	_ = viper.BindPFlag("tls.key", rootCmd.PersistentFlags().Lookup("tls-key"))         // viper bind errors are programming errors
 }
 
 func initConfig() {

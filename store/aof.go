@@ -47,12 +47,12 @@ func (p FsyncPolicy) String() string {
 
 // AOFWriter handles append-only file operations. It is safe for concurrent use.
 type AOFWriter struct {
-	mu          sync.Mutex
 	file        *os.File
 	writer      *bufio.Writer
-	filename    string
-	fsyncPolicy FsyncPolicy
 	done        chan struct{}
+	filename    string
+	mu          sync.Mutex
+	fsyncPolicy FsyncPolicy
 }
 
 // NewAOFWriter creates a new AOF writer for the given file with the specified
@@ -88,8 +88,12 @@ func (w *AOFWriter) backgroundFsync() {
 			return
 		case <-ticker.C:
 			w.mu.Lock()
-			w.writer.Flush()
-			w.file.Sync()
+			if err := w.writer.Flush(); err != nil {
+				slog.Warn("aof background fsync: failed to flush", "error", err)
+			}
+			if err := w.file.Sync(); err != nil {
+				slog.Warn("aof background fsync: failed to sync", "error", err)
+			}
 			w.mu.Unlock()
 		}
 	}
@@ -186,52 +190,58 @@ func (s *Store) LoadAOF(filename string) error {
 
 		count++
 
+		replay := func(cmd string, fn func() error) {
+			if err := fn(); err != nil {
+				slog.Warn("aof replay: failed to execute command", "command", cmd, "error", err)
+			}
+		}
+
 		switch args[0] {
 		case "SET":
 			if len(args) >= 5 && args[3] == "EX" {
 				seconds, _ := strconv.Atoi(args[4])
 				expiry := time.Now().Add(time.Duration(seconds) * time.Second)
-				s.Set(args[1], args[2], &expiry)
+				replay("SET", func() error { return s.Set(args[1], args[2], &expiry) })
 			} else if len(args) >= 3 {
-				s.Set(args[1], args[2], nil)
+				replay("SET", func() error { return s.Set(args[1], args[2], nil) })
 			}
 		case "DEL":
 			if len(args) >= 2 {
-				s.Del(args[1:]...)
+				replay("DEL", func() error { _, err := s.Del(args[1:]...); return err })
 			}
 		case "HSET":
 			if len(args) >= 4 {
-				s.HSet(args[1], args[2], args[3])
+				replay("HSET", func() error { _, err := s.HSet(args[1], args[2], args[3]); return err })
 			}
 		case "HDEL":
 			if len(args) >= 3 {
-				s.HDel(args[1], args[2:]...)
+				replay("HDEL", func() error { _, err := s.HDel(args[1], args[2:]...); return err })
 			}
 		case "INCR":
 			if len(args) >= 2 {
-				s.Incr(args[1])
+				replay("INCR", func() error { _, err := s.Incr(args[1]); return err })
 			}
 		case "LPUSH":
 			if len(args) >= 3 {
-				s.LPush(args[1], args[2:]...)
+				replay("LPUSH", func() error { _, err := s.LPush(args[1], args[2:]...); return err })
 			}
 		case "RPUSH":
 			if len(args) >= 3 {
-				s.RPush(args[1], args[2:]...)
+				replay("RPUSH", func() error { _, err := s.RPush(args[1], args[2:]...); return err })
 			}
 		case "LPOP":
 			if len(args) >= 2 {
-				s.LPop(args[1])
+				replay("LPOP", func() error { _, err := s.LPop(args[1]); return err })
 			}
 		case "RPOP":
 			if len(args) >= 2 {
-				s.RPop(args[1])
+				replay("RPOP", func() error { _, err := s.RPop(args[1]); return err })
 			}
 		case "LTRIM":
 			if len(args) >= 4 {
 				start, _ := strconv.Atoi(args[2])
 				stop, _ := strconv.Atoi(args[3])
-				s.LTrim(args[1], start, stop)
+				replay("LTRIM", func() error { return s.LTrim(args[1], start, stop) })
 			}
 		}
 	}
