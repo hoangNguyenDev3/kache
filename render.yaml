@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: kache
+    runtime: docker
+    plan: free
+    envVars:
+      - key: KACHE_HTTP_PORT
+        value: "8080"
+      - key: KACHE_RESP_PORT
+        value: "6379"

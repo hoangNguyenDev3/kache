@@ -1,8 +1,14 @@
-[![CI](https://github.com/hoangNguyenDev3/kache/actions/workflows/ci.yml/badge.svg)](https://github.com/hoangNguyenDev3/kache/actions/workflows/ci.yml) [![Go Version](https://img.shields.io/github/go-mod/go-version/hoangNguyenDev3/kache)](https://github.com/hoangNguyenDev3/kache) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Go Report Card](https://goreportcard.com/badge/github.com/hoangNguyenDev3/kache)](https://goreportcard.com/report/github.com/hoangNguyenDev3/kache)
+[![CI](https://github.com/hoangNguyenDev3/kache/actions/workflows/ci.yml/badge.svg)](https://github.com/hoangNguyenDev3/kache/actions/workflows/ci.yml) [![Go Version](https://img.shields.io/github/go-mod/go-version/hoangNguyenDev3/kache)](https://github.com/hoangNguyenDev3/kache) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Go Report Card](https://goreportcard.com/badge/github.com/hoangNguyenDev3/kache)](https://goreportcard.com/report/github.com/hoangNguyenDev3/kache) [![codecov](https://codecov.io/gh/hoangNguyenDev3/kache/branch/main/graph/badge.svg)](https://codecov.io/gh/hoangNguyenDev3/kache) [![Release](https://img.shields.io/github/v/release/hoangNguyenDev3/kache)](https://github.com/hoangNguyenDev3/kache/releases/latest)
 
 # Kache
 
 A multi-core, Redis-compatible in-memory data store built in Go — optimized where Redis isn't.
+
+## Live Demo
+
+Try Kache without installing anything: [**Launch Demo**](https://kache-demo.vercel.app)
+
+> Interactive web console to SET/GET keys, manage lists and hashes, and monitor server health in real time.
 
 ## Why Kache?
 
@@ -90,14 +96,24 @@ Kache supports two complementary persistence mechanisms that can be enabled simu
 
 **AOF (Append-Only File)** — A RESP-format journal that logs every write command. Supports three fsync policies: `always` (safest), `everysec` (default, good balance), and `no` (OS-managed). Background compaction via the `BGREWRITEAOF` command rewrites the log with only the current dataset, using an atomic rename for crash safety.
 
-## Getting Started
+## Install
+
+### Pre-built Binaries
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/hoangNguyenDev3/kache/releases/latest).
+
+### From Source
 
 ```bash
-go build -o kache
+go build -o kache .
 ./kache server
-./kache server --resp-port 6380 --http-port 8081 --aof-fsync always
-docker build -t kache .
-docker run -p 6379:6379 -p 8080:8080 kache
+```
+
+### Docker
+
+```bash
+docker pull ghcr.io/hoangnguyendev3/kache:latest
+docker run -p 6379:6379 -p 8080:8080 ghcr.io/hoangnguyendev3/kache:latest
 ```
 
 ## Configuration

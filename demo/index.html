@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kache — Live Demo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="header-inner">
+                <div class="brand">
+                    <div class="logo">
+                        <svg viewBox="0 0 32 32" width="32" height="32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect width="32" height="32" rx="6" fill="#00d4aa" opacity="0.15" />
+                            <path d="M8 12h16M8 16h12M8 20h8" stroke="#00d4aa" stroke-width="2.5"
+                                stroke-linecap="round" />
+                        </svg>
+                    </div>
+                    <div class="brand-text">
+                        <h1>Kache</h1>
+                        <p class="tagline">A multi-core, Redis-compatible in-memory data store</p>
+                    </div>
+                </div>
+                <div class="connection-status" id="connectionStatus">
+                    <span class="status-dot" id="statusDot"></span>
+                    <span class="status-label" id="statusLabel">Checking...</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="main">
+            <div class="main-inner">
+                <section class="dashboard-panel">
+                    <div class="panel-header">
+                        <h2>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+                            </svg>
+                            Health Dashboard
+                        </h2>
+                        <span class="refresh-badge" id="lastRefresh">--</span>
+                    </div>
+                    <div class="dashboard-grid" id="dashboardGrid">
+                        <div class="metric-card">
+                            <span class="metric-label">Version</span>
+                            <span class="metric-value" id="metricVersion">--</span>
+                        </div>
+                        <div class="metric-card">
+                            <span class="metric-label">Uptime</span>
+                            <span class="metric-value" id="metricUptime">--</span>
+                        </div>
+                        <div class="metric-card">
+                            <span class="metric-label">Goroutines</span>
+                            <span class="metric-value" id="metricGoroutines">--</span>
+                        </div>
+                        <div class="metric-card">
+                            <span class="metric-label">Go Version</span>
+                            <span class="metric-value" id="metricGoVersion">--</span>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="workspace">
+                    <div class="workspace-main">
+                        <section class="console-panel">
+                            <div class="panel-header">
+                                <h2>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="4 17 10 11 4 5" />
+                                        <line x1="12" y1="19" x2="20" y2="19" />
+                                    </svg>
+                                    Command Console
+                                </h2>
+                            </div>
+
+                            <div class="console-tabs">
+                                <button class="console-tab active" data-tab="strings">Strings</button>
+                                <button class="console-tab" data-tab="lists">Lists</button>
+                                <button class="console-tab" data-tab="hashes">Hashes</button>
+                                <button class="console-tab" data-tab="ttl">TTL</button>
+                            </div>
+
+                            <div class="console-body">
+                                <!-- Strings Tab -->
+                                <div class="tab-content active" id="tab-strings">
+                                    <div class="input-group">
+                                        <label for="strKey">Key</label>
+                                        <input type="text" id="strKey" placeholder="e.g. user:123:name">
+                                    </div>
+                                    <div class="input-group">
+                                        <label for="strValue">Value</label>
+                                        <input type="text" id="strValue" placeholder="e.g. Alice">
+                                    </div>
+                                    <div class="button-row">
+                                        <button class="btn btn-cyan" onclick="execSet()">SET</button>
+                                        <button class="btn btn-cyan" onclick="execGet()">GET</button>
+                                        <button class="btn btn-yellow" onclick="execDel()">DEL</button>
+                                    </div>
+                                </div>
+
+                                <!-- Lists Tab -->
+                                <div class="tab-content" id="tab-lists">
+                                    <div class="input-group">
+                                        <label for="listKey">Key</label>
+                                        <input type="text" id="listKey" placeholder="e.g. queue:jobs">
+                                    </div>
+                                    <div class="input-group">
+                                        <label for="listValue">Value(s)</label>
+                                        <input type="text" id="listValue"
+                                            placeholder="e.g. job1, job2 (comma-separated for push)">
+                                    </div>
+                                    <div class="input-row">
+                                        <div class="input-group compact">
+                                            <label for="listStart">Start</label>
+                                            <input type="number" id="listStart" placeholder="0">
+                                        </div>
+                                        <div class="input-group compact">
+                                            <label for="listStop">Stop</label>
+                                            <input type="number" id="listStop" placeholder="-1">
+                                        </div>
+                                    </div>
+                                    <div class="button-row">
+                                        <button class="btn btn-purple" onclick="execLPush()">LPUSH</button>
+                                        <button class="btn btn-purple" onclick="execRPush()">RPUSH</button>
+                                        <button class="btn btn-purple" onclick="execLPop()">LPOP</button>
+                                        <button class="btn btn-purple" onclick="execRPop()">RPOP</button>
+                                        <button class="btn btn-purple" onclick="execLRange()">LRANGE</button>
+                                        <button class="btn btn-purple" onclick="execLLen()">LLEN</button>
+                                    </div>
+                                </div>
+
+                                <!-- Hashes Tab -->
+                                <div class="tab-content" id="tab-hashes">
+                                    <div class="input-group">
+                                        <label for="hashKey">Key</label>
+                                        <input type="text" id="hashKey" placeholder="e.g. user:123">
+                                    </div>
+                                    <div class="input-group">
+                                        <label for="hashField">Field</label>
+                                        <input type="text" id="hashField" placeholder="e.g. email">
+                                    </div>
+                                    <div class="input-group">
+                                        <label for="hashValue">Value</label>
+                                        <input type="text" id="hashValue" placeholder="e.g. alice@example.com">
+                                    </div>
+                                    <div class="button-row">
+                                        <button class="btn btn-orange" onclick="execHSet()">HSET</button>
+                                        <button class="btn btn-orange" onclick="execHGet()">HGET</button>
+                                    </div>
+                                </div>
+
+                                <!-- TTL Tab -->
+                                <div class="tab-content" id="tab-ttl">
+                                    <div class="input-group">
+                                        <label for="ttlKey">Key</label>
+                                        <input type="text" id="ttlKey" placeholder="e.g. session:abc">
+                                    </div>
+                                    <div class="input-group">
+                                        <label for="ttlSeconds">Expire (seconds)</label>
+                                        <input type="number" id="ttlSeconds" placeholder="e.g. 300">
+                                    </div>
+                                    <div class="button-row">
+                                        <button class="btn btn-yellow" onclick="execExpire()">EXPIRE</button>
+                                        <button class="btn btn-yellow" onclick="execTtl()">TTL</button>
+                                    </div>
+                                    <p class="hint">Note: EXPIRE/TTL endpoints are not exposed via HTTP in the current
+                                        API. Use TCP/RESP for full TTL support.</p>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section class="history-panel">
+                            <div class="panel-header">
+                                <h2>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                                    </svg>
+                                    Command History
+                                </h2>
+                                <button class="btn-clear" onclick="clearHistory()">Clear</button>
+                            </div>
+                            <div class="history-scroll" id="historyScroll">
+                                <div class="history-empty" id="historyEmpty">No commands yet. Run an operation above to
+                                    see results.</div>
+                                <div class="history-list" id="historyList"></div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <aside class="sidebar">
+                        <div class="panel-header">
+                            <h2>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="12" y1="16" x2="12" y2="12" />
+                                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                                </svg>
+                                Quick Reference
+                            </h2>
+                        </div>
+                        <div class="reference-content">
+                            <div class="ref-group">
+                                <h3 class="ref-title ref-cyan">Strings</h3>
+                                <ul class="ref-list">
+                                    <li><code>SET key value</code></li>
+                                    <li><code>GET key</code></li>
+                                    <li><code>DEL key</code></li>
+                                    <li><code>INCR key</code></li>
+                                </ul>
+                            </div>
+                            <div class="ref-group">
+                                <h3 class="ref-title ref-purple">Lists</h3>
+                                <ul class="ref-list">
+                                    <li><code>LPUSH key values...</code></li>
+                                    <li><code>RPUSH key values...</code></li>
+                                    <li><code>LPOP key</code></li>
+                                    <li><code>RPOP key</code></li>
+                                    <li><code>LRANGE key start stop</code></li>
+                                    <li><code>LLEN key</code></li>
+                                </ul>
+                            </div>
+                            <div class="ref-group">
+                                <h3 class="ref-title ref-orange">Hashes</h3>
+                                <ul class="ref-list">
+                                    <li><code>HSET key field value</code></li>
+                                    <li><code>HGET key field</code></li>
+                                </ul>
+                            </div>
+                            <div class="ref-group">
+                                <h3 class="ref-title ref-yellow">Keys</h3>
+                                <ul class="ref-list">
+                                    <li><code>EXPIRE key seconds</code></li>
+                                    <li><code>TTL key</code></li>
+                                </ul>
+                            </div>
+                            <div class="ref-group">
+                                <h3 class="ref-title">HTTP Endpoints</h3>
+                                <ul class="ref-list ref-endpoints">
+                                    <li><span class="method get">GET</span> <code>/health</code></li>
+                                    <li><span class="method post">POST</span> <code>/v1/kv/:key</code></li>
+                                    <li><span class="method get">GET</span> <code>/v1/kv/:key</code></li>
+                                    <li><span class="method del">DEL</span> <code>/v1/kv/:key</code></li>
+                                    <li><span class="method post">POST</span> <code>/v1/hash/:key</code></li>
+                                    <li><span class="method get">GET</span> <code>/v1/hash/:key/:field</code></li>
+                                    <li><span class="method post">POST</span> <code>/v1/list/:key/lpush</code></li>
+                                    <li><span class="method post">POST</span> <code>/v1/list/:key/rpush</code></li>
+                                    <li><span class="method post">POST</span> <code>/v1/list/:key/lpop</code></li>
+                                    <li><span class="method post">POST</span> <code>/v1/list/:key/rpop</code></li>
+                                    <li><span class="method get">GET</span> <code>/v1/list/:key/range</code></li>
+                                    <li><span class="method get">GET</span> <code>/v1/list/:key/len</code></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <div class="footer-inner">
+                <span class="footer-built">Built with <span class="go-badge">Go</span></span>
+                <a href="https://github.com/hoangNguyenDev3/kache" target="_blank" rel="noopener" class="footer-link">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+                    </svg>
+                    View on GitHub
+                </a>
+            </div>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

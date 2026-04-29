@@ -9,11 +9,15 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/hoangNguyenDev3/kache/store"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
+// Version is injected at build time and exposed via the /health endpoint.
+var Version string
 
 // HTTPServer provides a REST API over the Kache store, backed by the
 // Gin framework. It exposes key-value, hash, and list operations as well
@@ -67,6 +71,16 @@ func NewHTTPServer(store *store.Store, authToken string) *HTTPServer {
 		metrics.errorRate,
 		metrics.keyspaceSize,
 	)
+
+	// CORS middleware for cross-origin requests from the demo frontend
+	s.engine.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: false,
+		MaxAge:           12 * time.Hour,
+	}))
 
 	s.setupRoutes()
 	return s
@@ -505,7 +519,7 @@ func (s *HTTPServer) lrangeValue(c *gin.Context) {
 func (s *HTTPServer) getHealth(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":         "ok",
-		"version":        "dev",
+		"version":        Version,
 		"uptime_seconds": time.Since(s.startTime).Seconds(),
 		"go_version":     runtime.Version(),
 		"goroutines":     runtime.NumGoroutine(),

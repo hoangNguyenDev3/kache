@@ -145,6 +145,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	}()
 
 	// Start HTTP server
+	server.Version = Version
 	httpServer := server.NewHTTPServer(s, viper.GetString("auth-token"))
 	if tlsConfig != nil {
 		httpServer.SetTLS(certFile, keyFile)

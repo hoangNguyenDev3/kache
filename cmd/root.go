@@ -9,10 +9,13 @@ import (
 	"github.com/spf13/viper"
 )
 
+// Version is set at build time via ldflags.
+var Version string
+
 var (
 	cfgFile string
 	rootCmd = &cobra.Command{
-		Use:   "redis-clone",
+		Use:   "kache",
 		Short: "A production-grade Redis clone in Go",
 		Long: `A Redis clone implementing core Redis functionality including:
 - In-memory key-value store
@@ -25,6 +28,7 @@ var (
 
 // Execute runs the root command and returns any error.
 func Execute() error {
+	rootCmd.Version = Version
 	return rootCmd.Execute()
 }
 
