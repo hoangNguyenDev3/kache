@@ -211,6 +211,10 @@ func (s *HTTPServer) setupRoutes() {
 
 func (s *HTTPServer) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if s.authToken == "" {
+			c.Next()
+			return
+		}
 		token := c.GetHeader("Authorization")
 		if token != "Bearer "+s.authToken {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
