@@ -44,7 +44,7 @@
         <main class="main">
             <div class="main-inner">
                 <section class="hero-section">
-                    <h2 class="hero-tagline">A Multi-Core, Redis-Compatible In-Memory Data Store</h2>
+                    <h2 class="hero-tagline">A Multi-Core, Redis-Compatible In-Memory Data Store Built From Scratch</h2>
                     <div class="hero-stats">
                         <div class="hero-stat">
                             <span class="hero-stat-value">7.5M</span>
@@ -291,8 +291,8 @@
                                 <div class="arch-vline"></div>
 
                                 <div class="arch-row">
-                                    <div class="arch-box arch-cyan">RESP Parser + Pipelining</div>
-                                    <div class="arch-box arch-cyan">HTTP/REST API</div>
+                                    <div class="arch-box arch-cyan">TCP :6379 / RESP</div>
+                                    <div class="arch-box arch-cyan">HTTP :8080 / REST</div>
                                 </div>
 
                                 <div class="arch-connector arch-merge" style="width: 224px;">
@@ -319,30 +319,22 @@
                                 </div>
 
                                 <div class="arch-row">
-                                    <div class="arch-box arch-purple">Transaction Engine</div>
                                     <div class="arch-box arch-purple">Pub/Sub Engine</div>
-                                    <div class="arch-box arch-blue">Sharded Store<small>16 shards x RWMutex</small>
+                                    <div class="arch-box arch-blue">Sharded Store<small>16 shards × RWMutex</small>
                                     </div>
+                                    <div class="arch-box arch-purple">Transaction Engine</div>
                                 </div>
 
                                 <div class="arch-vline"></div>
 
                                 <div class="arch-row">
-                                    <div class="arch-box arch-orange">Persistence Engine</div>
-                                </div>
-
-                                <div class="arch-connector arch-split" style="width: 224px;">
-                                    <div class="conn-stem"></div>
-                                    <div class="conn-bar"></div>
-                                    <div class="conn-legs">
-                                        <div class="conn-leg"></div>
-                                        <div class="conn-leg"></div>
-                                    </div>
-                                </div>
-
-                                <div class="arch-row">
                                     <div class="arch-box arch-orange">RDB Snapshots<small>Fork-free</small></div>
-                                    <div class="arch-box arch-orange">AOF Journal<small>RESP format</small></div>
+                                    <div class="arch-box arch-orange">AOF Journal<small>3 fsync policies</small></div>
+                                </div>
+
+                                <div class="arch-row" style="margin-top: 16px; opacity: 0.6;">
+                                    <div class="arch-box" style="border-style: dashed;">Expiry GC</div>
+                                    <div class="arch-box" style="border-style: dashed;">Metrics · Health · Profiling</div>
                                 </div>
                             </div>
                         </div>
@@ -357,36 +349,36 @@
                                 <table>
                                     <thead>
                                         <tr>
-                                            <th>Feature</th>
-                                            <th>Redis</th>
-                                            <th>Kache</th>
+                                            <th>Aspect</th>
+                                            <th>Redis Approach</th>
+                                            <th>My Approach</th>
+                                            <th>What I Learned</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <tr>
-                                            <td>Threading Model</td>
-                                            <td class="redis-cell">Single-threaded</td>
-                                            <td class="kache-cell">Multi-core (16 shards x RWMutex)</td>
+                                            <td>Threading</td>
+                                            <td class="redis-cell">Single-threaded event loop</td>
+                                            <td class="kache-cell">Goroutine-per-connection + 16 shards</td>
+                                            <td>Multi-threading only pays off with careful sharding</td>
                                         </tr>
                                         <tr>
                                             <td>RDB Snapshot</td>
-                                            <td class="redis-cell">fork() — 2x memory spike</td>
-                                            <td class="kache-cell">Fork-free progressive — no spike</td>
+                                            <td class="redis-cell">fork() + COW</td>
+                                            <td class="kache-cell">Progressive shard-by-shard</td>
+                                            <td>fork() gives perfect snapshot but at steep memory cost</td>
                                         </tr>
                                         <tr>
-                                            <td>Protocol</td>
-                                            <td class="redis-cell">RESP only</td>
-                                            <td class="kache-cell">RESP + HTTP/REST dual interface</td>
+                                            <td>INCR</td>
+                                            <td class="redis-cell">Inherently atomic</td>
+                                            <td class="kache-cell">sync/atomic — lock-free</td>
+                                            <td>Atomics only needed because I chose multi-threading</td>
                                         </tr>
                                         <tr>
-                                            <td>Observability</td>
-                                            <td class="redis-cell">Basic INFO command</td>
-                                            <td class="kache-cell">Prometheus + pprof + structured logging</td>
-                                        </tr>
-                                        <tr>
-                                            <td>Atomic INCR</td>
-                                            <td class="redis-cell">Mutex-locked</td>
-                                            <td class="kache-cell">Lock-free atomic (31M ops/sec)</td>
+                                            <td>Key Expiry</td>
+                                            <td class="redis-cell">Lazy + periodic</td>
+                                            <td class="kache-cell">Lazy + probabilistic sampling</td>
+                                            <td>Sampling 20 keys with 25% threshold is bounded-cost</td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -432,7 +424,7 @@
                                         cmds/sec</span></div>
                             </div>
 
-                            <p class="bench-note">Benchmarked on Apple M1, Go 1.21</p>
+                            <p class="bench-note">Benchmarked on Apple M1, Go 1.25</p>
                         </div>
                     </div>
                 </section>
