@@ -304,6 +304,66 @@ body {
 }
 
 /* =============================================
+   Install Snippet
+   ============================================= */
+.install-snippet {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 12px 18px;
+}
+
+.install-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+}
+
+.install-code {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    overflow-x: auto;
+}
+
+.install-code code {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: var(--accent-cyan);
+    white-space: nowrap;
+}
+
+.install-copy {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.install-copy:hover {
+    color: var(--accent-cyan);
+    background: var(--accent-cyan-dim);
+}
+
+/* =============================================
    Architecture Diagram
    ============================================= */
 .arch-section {
@@ -618,7 +678,7 @@ body {
 }
 
 .accordion-item.open .accordion-body {
-    max-height: 800px;
+    max-height: 1200px;
     padding: 24px;
     overflow-y: auto;
 }
@@ -776,6 +836,33 @@ body {
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 6px;
+}
+
+.tooltip-wrap {
+    position: relative;
+    display: inline-flex;
+}
+
+.tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 400;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.tooltip-wrap:hover .tooltip {
+    opacity: 1;
 }
 
 .btn {
@@ -1283,6 +1370,42 @@ body {
         font-size: 1.8rem;
     }
 
+    .hero-features {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .hero-feature-sep {
+        display: none;
+    }
+
+    .install-snippet {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .install-label {
+        text-align: center;
+    }
+
+    .install-code {
+        font-size: 0.75rem;
+    }
+
+    .install-code code {
+        font-size: 0.72rem;
+    }
+
+    .comparison-table {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .comparison-table table {
+        min-width: 600px;
+    }
+
     .arch-diagram {
         min-width: auto;
     }
@@ -1324,6 +1447,19 @@ body {
     .console-status .status-info {
         display: none;
     }
+
+    .tech-badges {
+        gap: 6px;
+    }
+
+    .tech-badge {
+        font-size: 0.68rem;
+        padding: 4px 10px;
+    }
+
+    .accordion-item.open .accordion-body {
+        padding: 16px;
+    }
 }
 
 @media (max-width: 480px) {
@@ -1336,6 +1472,48 @@ body {
     }
 
     .tagline {
+        font-size: 0.7rem;
+    }
+
+    .hero-tagline {
+        font-size: 0.95rem;
+    }
+
+    .hero-stat-value {
+        font-size: 1.4rem;
+    }
+
+    .hero-stat-label {
+        font-size: 0.68rem;
+    }
+
+    .hero-badges {
+        gap: 6px;
+    }
+
+    .hero-badge {
+        font-size: 0.65rem;
+        padding: 3px 8px;
+    }
+
+    .install-code code {
+        font-size: 0.65rem;
+    }
+
+    .panel-header {
+        padding: 10px 14px;
+    }
+
+    .console-body {
+        padding: 14px;
+    }
+
+    .bench-bar {
+        height: 28px;
+    }
+
+    .bench-label,
+    .bench-value {
         font-size: 0.7rem;
     }
 }

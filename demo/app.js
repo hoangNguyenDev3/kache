@@ -288,6 +288,19 @@ function execTtl() {
 }
 
 /* =============================================
+   Install Copy
+   ============================================= */
+
+function copyInstall() {
+    const code = document.querySelector('.install-code code');
+    navigator.clipboard.writeText(code.textContent).then(() => {
+        showToast('Copied to clipboard!', 'success');
+    }).catch(() => {
+        showToast('Failed to copy', 'error');
+    });
+}
+
+/* =============================================
    Toast Notifications
    ============================================= */
 
