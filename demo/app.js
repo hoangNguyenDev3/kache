@@ -57,42 +57,11 @@ async function checkHealth() {
     try {
         const res = await fetch(`${API_BASE_URL}/health`, { method: 'GET' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        document.getElementById('statusVersion').textContent = data.version ?? '--';
-        document.getElementById('statusUptime').textContent = formatDuration(data.uptime_seconds ?? 0);
-        setConnectionStatus(true);
+        // Health check still running to keep connection alive or log errors
+        await res.json();
     } catch (err) {
-        setConnectionStatus(false);
         console.warn('Health check failed:', err.message);
     }
-}
-
-function setConnectionStatus(online) {
-    const dot = document.getElementById('statusDot');
-    const label = document.getElementById('statusLabel');
-    dot.classList.remove('online', 'offline');
-    if (online) {
-        dot.classList.add('online');
-        label.textContent = 'Connected';
-        label.style.color = 'var(--accent-green)';
-    } else {
-        dot.classList.add('offline');
-        label.textContent = 'Disconnected';
-        label.style.color = 'var(--accent-red)';
-    }
-}
-
-function formatDuration(seconds) {
-    const s = Math.floor(seconds % 60);
-    const m = Math.floor((seconds / 60) % 60);
-    const h = Math.floor((seconds / 3600) % 24);
-    const d = Math.floor(seconds / 86400);
-    const parts = [];
-    if (d > 0) parts.push(`${d}d`);
-    if (h > 0) parts.push(`${h}h`);
-    if (m > 0) parts.push(`${m}m`);
-    parts.push(`${s}s`);
-    return parts.join(' ');
 }
 
 /* =============================================
